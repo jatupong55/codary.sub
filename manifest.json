@@ -1,0 +1,23 @@
+{
+  "name": "Codary Sub",
+  "short_name": "Codary",
+  "description": "แพลตฟอร์มจัดการสตรีมมิ่งที่ง่ายที่สุด",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
