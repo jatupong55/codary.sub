@@ -278,14 +278,14 @@ const DetailDrawer = ({ isOpen, onClose, sub, userProfile }: { isOpen: boolean, 
 
             {/* --- Support & Actions --- */}
             <section className="pt-4 space-y-3 pb-10">
-              
               <button 
                 onClick={() => {
                   // สร้างข้อความแจ้งปัญหา พร้อมดึงชื่อแพ็กเกจและอีเมล
-                  const text = `🚨 แจ้งปัญหาการใช้งาน\n\nแพ็กเกจ: ${activeSub.products.name}\nบัญชี: ${userProfile?.email}\n\nรายละเอียดปัญหา: `;
-                  const encodedText = encodeURIComponent(text);
-                  // เปลี่ยน @your_line_oa เป็นไอดี LINE OA ของคุณจริงๆ
-                  window.open(`https://line.me/R/oaMessage/@367sxicn/?text=${encodedText}`, '_blank');
+                  const message = `🚨 แจ้งปัญหาการใช้งาน\n\nแพ็กเกจ: ${activeSub.products.name}\nบัญชี: ${userProfile?.email}\n\nรายละเอียดปัญหา: `;
+                  const encodedText = encodeURIComponent(message);
+                  
+                  // ลบคำว่า text= ออก เหลือแค่ /? ตามด้วยข้อความที่เข้ารหัสแล้ว
+                  window.open(`https://line.me/R/oaMessage/@367sxicn/?${encodedText}`, '_blank');
                 }} 
                 className="w-full bg-[#00C300]/10 border border-[#00C300]/20 text-[#00C300] py-3.5 rounded-2xl font-bold text-sm hover:bg-[#00C300]/20 transition-all flex items-center justify-center gap-2"
               >
@@ -299,9 +299,11 @@ const DetailDrawer = ({ isOpen, onClose, sub, userProfile }: { isOpen: boolean, 
                 onClick={() => {
                   // ยืนยันก่อนเด้งไป LINE ป้องกันลูกค้ากดโดนโดยไม่ได้ตั้งใจ
                   if(confirm('คุณต้องการแจ้งยกเลิกแพ็กเกจนี้ใช่หรือไม่? ระบบจะพาคุณไปยัง LINE เพื่อยืนยันกับแอดมิน')) {
-                    const text = `💔 แจ้งยกเลิกแพ็กเกจ / ออกจากกลุ่ม\n\nแพ็กเกจ: ${activeSub.products.name}\nบัญชี: ${userProfile?.email}\n\nเหตุผลที่ต้องการยกเลิก: `;
-                    const encodedText = encodeURIComponent(text);
-                    window.open(`https://line.me/R/oaMessage/@367sxicn/?text=${encodedText}`, '_blank');
+                    const message = `💔 แจ้งยกเลิกแพ็กเกจ / ออกจากกลุ่ม\n\nแพ็กเกจ: ${activeSub.products.name}\nบัญชี: ${userProfile?.email}\n\nเหตุผลที่ต้องการยกเลิก: `;
+                    const encodedText = encodeURIComponent(message);
+                    
+                    // ลบคำว่า text= ออกเช่นเดียวกันครับ
+                    window.open(`https://line.me/R/oaMessage/@367sxicn/?${encodedText}`, '_blank');
                   }
                 }}
                 className="w-full text-red-400 py-3 rounded-xl font-bold text-xs hover:text-red-600 hover:bg-red-50 transition-all flex items-center justify-center gap-2"
