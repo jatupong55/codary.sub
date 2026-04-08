@@ -80,8 +80,10 @@ export async function POST(request: Request) {
 
       if (fetchSubError) throw fetchSubError;
 
-      // 3. เริ่มต้นคำนวณวันหมดอายุใหม่
-      const category = subData.products?.category;
+      // 3. เริ่มต้นคำนวณวันหมดอายุใหม่ (แก้ปัญหา TypeScript Array/Object ตรงนี้ครับ ✨)
+      const productsData: any = subData.products;
+      const category = Array.isArray(productsData) ? productsData[0]?.category : productsData?.category;
+      
       const details = subData.details || {};
       
       let currentEndDate = new Date(subData.end_date);
