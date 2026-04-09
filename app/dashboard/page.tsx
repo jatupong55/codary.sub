@@ -88,10 +88,12 @@ export default function Dashboard() {
         return; // สั่ง return เพื่อหยุดการทำงานของโค้ดด้านล่างทันที
       }
 
+      const fallbackAvatar = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTUwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNCQ0UyRTgiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iI0YzQ0ZFMCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI0NDRjBENCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSJ1cmwoI2cpIi8+PHBhdGggZD0iTTc1IDc1YzExLjA0NiAwIDIwLTguOTU0IDIwLTIwcy04Ljk1NC0yMC0yMC0yMC0yMCA4Ljk1NC0yMCAyMCA4Ljk1NCAyMCAyMCAyMHptMCAxMGMtMTMuMzMzIDAtNDAgNi42NjctNDAgMjB2MTBoODB2LTEwYzAtMTMuMzMzLTI2LjY2Ny0yMC00MC0yMHoiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuOCIvPjwvc3ZnPg==";
+
       setUserProfile({
         id: session.user.id,
         email: session.user.email,
-        avatar_url: session.user.user_metadata?.avatar_url || 'https://via.placeholder.com/150',
+        avatar_url: session.user.user_metadata?.avatar_url || fallbackAvatar,
         display_name: dbUser?.display_name || session.user.user_metadata?.name || 'User',
         role: dbUser?.role || 'user'
       });
