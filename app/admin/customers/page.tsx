@@ -25,7 +25,6 @@ interface MasterAccount {
 }
 
 export default function AdminCustomersPage() {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([]);
   const [masterAccounts, setMasterAccounts] = useState<MasterAccount[]>([]);
@@ -158,10 +157,10 @@ export default function AdminCustomersPage() {
     // ถ้ายังไม่มีอีเมลนี้ในตะกร้า ให้สร้างตะกร้าใหม่
     if (!acc.has(email)) {
       acc.set(email, {
-        userId: (sub.users as any)?.id || sub.user_id || email,
+        userId: (sub.users as any)?.id || email, 
         displayName: sub.users?.display_name || 'ไม่ระบุชื่อ',
         email: email,
-        subs: [] // เตรียมกล่องเปล่าไว้ใส่แพ็กเกจ
+        subs: []
       });
     }
     // เอาแพ็กเกจโยนใส่ตะกร้าของคนนั้นๆ
