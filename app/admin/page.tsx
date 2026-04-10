@@ -47,8 +47,15 @@ export default function AdminDashboardPage() {
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'user'),
         supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('payments').select('amount').eq('status', 'สำเร็จ').gte('created_at', startOfMonth),
+        
         supabase.from('payments')
-          .select('id, amount, status, created_at, users(display_name), subscriptions(products(name))')
+          .select(`
+            id, amount, status, created_at, 
+            users ( display_name ), 
+            subscriptions!payments_subscription_id_fkey ( 
+              products!subscriptions_product_id_fkey ( name ) 
+            )
+          `)
           .order('created_at', { ascending: false })
           .limit(5)
       ]);
@@ -88,23 +95,61 @@ export default function AdminDashboardPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="p-6 rounded-2xl bg-white/60 backdrop-blur-md border border-white/40 shadow-sm relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#BCE2E8]/40 rounded-full blur-2xl" />
-          <h3 className="text-gray-500 font-medium">ลูกค้าทั้งหมด</h3>
-          <p className="text-4xl font-bold text-gray-800 mt-2">{stats.totalUsers} <span className="text-lg font-normal text-gray-500">คน</span></p>
+        
+        {/* Card 1: ลูกค้าทั้งหมด (ธีมสีฟ้า เร่งความเข้ม) */}
+        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#7DC9D9] to-[#BCE2E8] border border-[#7DC9D9]/50 shadow-lg shadow-[#BCE2E8]/40 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/30 rounded-full blur-2xl group-hover:bg-white/40 transition-colors" />
+          <div className="flex justify-between items-start relative z-10">
+            <div>
+              <h3 className="text-gray-800 font-bold mb-1 opacity-80">ลูกค้าทั้งหมด</h3>
+              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm">
+                {stats.totalUsers} <span className="text-lg font-bold opacity-70">คน</span>
+              </p>
+            </div>
+            <div className="p-3 bg-white/40 backdrop-blur-md rounded-xl text-gray-900 shadow-sm border border-white/50">
+              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
 
-        <div className="p-6 rounded-2xl bg-white/60 backdrop-blur-md border border-white/40 shadow-sm relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#CCF0D4]/40 rounded-full blur-2xl" />
-          <h3 className="text-gray-500 font-medium">แพ็กเกจที่ใช้งานอยู่ (Active)</h3>
-          <p className="text-4xl font-bold text-gray-800 mt-2">{stats.activeSubs} <span className="text-lg font-normal text-gray-500">รายการ</span></p>
+        {/* Card 2: แพ็กเกจที่ใช้งานอยู่ (ธีมสีเขียว เร่งความเข้ม) */}
+        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#8FE3A9] to-[#CCF0D4] border border-[#8FE3A9]/50 shadow-lg shadow-[#CCF0D4]/40 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/30 rounded-full blur-2xl group-hover:bg-white/40 transition-colors" />
+          <div className="flex justify-between items-start relative z-10">
+            <div>
+              <h3 className="text-gray-800 font-bold mb-1 opacity-80">แพ็กเกจที่ใช้งานอยู่ (Active)</h3>
+              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm">
+                {stats.activeSubs} <span className="text-lg font-bold opacity-70">รายการ</span>
+              </p>
+            </div>
+            <div className="p-3 bg-white/40 backdrop-blur-md rounded-xl text-gray-900 shadow-sm border border-white/50">
+              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
 
-        <div className="p-6 rounded-2xl bg-white/60 backdrop-blur-md border border-white/40 shadow-sm relative overflow-hidden">
-          <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#F3CFE0]/40 rounded-full blur-2xl" />
-          <h3 className="text-gray-500 font-medium">รายได้เดือนปัจจุบัน</h3>
-          <p className="text-4xl font-bold text-gray-800 mt-2">฿{stats.totalRevenue.toLocaleString()}</p>
+        {/* Card 3: รายได้เดือนปัจจุบัน (ธีมสีชมพู เร่งความเข้ม) */}
+        <div className="p-6 rounded-2xl bg-gradient-to-br from-[#E6A1C3] to-[#F3CFE0] border border-[#E6A1C3]/50 shadow-lg shadow-[#F3CFE0]/40 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/30 rounded-full blur-2xl group-hover:bg-white/40 transition-colors" />
+          <div className="flex justify-between items-start relative z-10">
+            <div>
+              <h3 className="text-gray-800 font-bold mb-1 opacity-80">รายได้เดือนปัจจุบัน</h3>
+              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm">
+                ฿{stats.totalRevenue.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-3 bg-white/40 backdrop-blur-md rounded-xl text-gray-900 shadow-sm border border-white/50">
+              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
         </div>
+
       </div>
 
       {/* Recent Payments */}

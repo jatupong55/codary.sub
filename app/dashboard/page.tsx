@@ -11,6 +11,7 @@ import Header from '@/components/dashboard/Header';
 import SubscriptionCard from '@/components/dashboard/SubscriptionCard';
 import DetailDrawer from '@/components/dashboard/DetailDrawer';
 import PaymentModal from '@/components/dashboard/PaymentModal';
+import StoreDrawer from '@/components/dashboard/StoreDrawer';
 
 export default function Dashboard() {
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -27,7 +28,7 @@ export default function Dashboard() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [activeDetailSub, setActiveDetailSub] = useState<any>(null);
 
-  const MY_PROMPTPAY_ID = "0812345678";
+  const MY_PROMPTPAY_ID = "0873616215";
 
   const fetchSubscriptions = useCallback(async (userId: string) => {
     const { data: subsData, error } = await supabase
@@ -153,8 +154,15 @@ export default function Dashboard() {
         </div>
 
         <section className="space-y-5">
-          <div className="flex items-center gap-3 ml-2 mb-4">
+          {/* ปรับ Layout ตรงนี้ให้มี Component StoreDrawer อยู่ชิดขวาของ Current Plan */}
+          <div className="flex items-center justify-between ml-2 mb-4">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Current Plan</h3>
+            
+            {/* โยนฟังก์ชัน fetchSubscriptions ไปให้ StoreDrawer เพื่อให้รีเฟรชหน้าหลังจากสั่งซื้อสำเร็จ */}
+            <StoreDrawer 
+              subscriptions={subscriptions}
+              onRefresh={() => fetchSubscriptions(userProfile.id)} 
+            />
           </div>
 
           {subscriptions.length === 0 ? (

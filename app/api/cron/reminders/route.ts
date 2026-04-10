@@ -1,79 +1,92 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { Resend } from 'resend';
+import { ReminderEmail } from '@/components/emails/ReminderEmail'; // ✨ 1. ดึง Template ใบเสร็จมาใช้
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// ใช้ฟังก์ชัน GET เพื่อให้ระบบ Cron สามารถเรียกใช้ URL นี้ได้ง่าย
+const resend = new Resend(process.env.RESEND_API_KEY); // ✨ 2. เตรียมระบบยิงเมล
+
 export async function GET(request: Request) {
+  // --- Security Check ---
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized: ระบุรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
+  }
+
   try {
-    // 1. คำนวณหาวันที่เป้าหมาย (เช่น อีก 3 วันข้างหน้า)
+    // --- ตั้งค่าวันที่ (ดึงจาก .env หรือใช้ 3 วันเป็นค่าพื้นฐาน) ---
+    const daysToNotify = parseInt(process.env.NOTIFY_BEFORE_DAYS || '3');
     const today = new Date();
     const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + 3);
+    targetDate.setDate(today.getDate() + daysToNotify);
     const targetDateString = targetDate.toISOString().split('T')[0];
 
-    // 2. ค้นหาแพ็กเกจที่มีสถานะ active และมีวันหมดอายุตรงกับเป้าหมาย
+    // --- ค้นหาลูกค้าที่ใกล้หมดอายุ ---
     const { data: expiringSubs, error } = await supabaseAdmin
       .from('subscriptions')
       .select(`
-        id,
-        end_date,
-        user_id,
+        id, end_date, user_id,
         users ( email, display_name ),
         products ( name, price )
       `)
       .eq('status', 'active')
-      .eq('end_date', targetDateString);
+      .gte('end_date', `${targetDateString}T00:00:00.000Z`)
+      .lte('end_date', `${targetDateString}T23:59:59.999Z`);
 
     if (error) throw error;
 
     if (!expiringSubs || expiringSubs.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'ไม่มีแพ็กเกจที่ต้องแจ้งเตือนในวันนี้' 
-      });
+      return NextResponse.json({ success: true, message: 'ไม่มีแพ็กเกจที่ต้องแจ้งเตือนในวันนี้' });
     }
 
     const notificationsSent = [];
 
-    // 3. วนลูปเพื่อส่งการแจ้งเตือนให้ลูกค้าแต่ละคน
+    // --- วนลูปยิง Email ---
     for (const sub of expiringSubs) {
       const user = sub.users as any;
       const product = sub.products as any;
       
       const userEmail = user.email;
-      const userName = user.display_name;
-      const productName = product.name;
-      const price = product.price;
+      // จัด Format วันที่ให้สวยงามแบบไทย (เช่น 26 เม.ย. 2569)
+      const formattedDate = new Date(sub.end_date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
 
-      // ในส่วนนี้เราจะใช้ Console.log เพื่อจำลองการส่ง Email 
-      // (ในอนาคตคุณสามารถนำ Library อย่าง Resend หรือ Nodemailer มาใส่ตรงนี้ได้เลย)
-      console.log('----------------------------------------');
-      console.log(`[Email Sent] To: ${userEmail}`);
-      console.log(`Subject: แจ้งเตือนต่ออายุแพ็กเกจ ${productName}`);
-      console.log(`Body: สวัสดีคุณ ${userName}, แพ็กเกจ ${productName} ของคุณกำลังจะหมดอายุในวันที่ ${targetDateString} (ยอดชำระ ${price} บาท) กรุณาเข้าสู่ระบบ Codary Sub เพื่อต่ออายุการใช้งานครับ`);
-      console.log('----------------------------------------');
+      try {
+        // 3. ส่ง Email จริงผ่าน Resend พร้อมยัดข้อมูลลง Template
+        await resend.emails.send({
+          // ถ้าบอสยังไม่ได้ยืนยัน Domain ในเว็บ Resend บรรทัดนี้ต้องเปลี่ยนเป็น 'onboarding@resend.dev' 
+          // และ 'to' ต้องเป็นอีเมลที่ใช้สมัคร Resend เท่านั้น (สำหรับใช้ตอน Test)
+          from: 'Codary Sub <onboarding@resend.dev>', 
+          to: [userEmail], 
+          subject: `แจ้งเตือนยอดชำระ: ${product.name}`,
+          react: ReminderEmail({ 
+            userName: user.display_name, 
+            productName: product.name, 
+            targetDateString: formattedDate, 
+            price: product.price 
+          }) as React.ReactElement,
+        });
+        
+        console.log(`✅ ยิง Email สำเร็จ -> ${userEmail}`);
+        notificationsSent.push(userEmail);
 
-      notificationsSent.push(userEmail);
+      } catch (emailError) {
+        console.error(`❌ ยิง Email พลาด -> ${userEmail}:`, emailError);
+      }
     }
 
-    // 4. อัปเดตสถานะในฐานข้อมูลเป็น expiring_soon เพื่อให้ UI หน้าเว็บเปลี่ยนสถานะ
+    // --- อัปเดตสถานะใน Database เป็น expiring_soon ---
     const subIds = expiringSubs.map(s => s.id);
     if (subIds.length > 0) {
-      const { error: updateError } = await supabaseAdmin
-        .from('subscriptions')
-        .update({ status: 'expiring_soon' })
-        .in('id', subIds);
-
-      if (updateError) throw updateError;
+      await supabaseAdmin.from('subscriptions').update({ status: 'expiring_soon' }).in('id', subIds);
     }
 
     return NextResponse.json({
       success: true,
-      message: `ดำเนินการแจ้งเตือนและอัปเดตสถานะสำเร็จจำนวน ${notificationsSent.length} รายการ`,
+      message: `ดำเนินการแจ้งเตือนสำเร็จจำนวน ${notificationsSent.length} รายการ`,
       notifiedUsers: notificationsSent
     });
 

@@ -30,7 +30,19 @@ export default function AdminPaymentsPage() {
   // Modal State
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleOpenModal = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setIsModalOpen(true);
+    setTimeout(() => setIsAnimating(true), 50);
+  };
+
+  const handleCloseModal = () => {
+    setIsAnimating(false);
+    setTimeout(() => setIsModalOpen(false), 300);
+  };
 
   useEffect(() => {
     const checkAuthAndFetchData = async () => {
@@ -113,7 +125,7 @@ export default function AdminPaymentsPage() {
 
       if (subError) throw subError;
 
-      setIsModalOpen(false);
+      handleCloseModal();
       
       // แจ้งเตือนสวยๆ ว่าสำเร็จแล้ว
       Swal.fire({
@@ -166,7 +178,7 @@ export default function AdminPaymentsPage() {
 
       if (error) throw error;
 
-      setIsModalOpen(false);
+      handleCloseModal();
 
       // 3. แจ้งเตือนเมื่อทำรายการสำเร็จ
       Swal.fire({
@@ -273,10 +285,7 @@ export default function AdminPaymentsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <button
-                      onClick={() => {
-                        setSelectedPayment(payment);
-                        setIsModalOpen(true);
-                      }}
+                      onClick={() => handleOpenModal(payment)}
                       className="px-3 py-1.5 bg-white border border-gray-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors shadow-sm"
                     >
                       ตรวจสลิป
@@ -298,7 +307,7 @@ export default function AdminPaymentsPage() {
 
       {/* Slip Approval Modal (Glassmorphism) */}
       {isModalOpen && selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
           <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col md:flex-row overflow-hidden">
             
             {/* Left: Slip Image */}
@@ -319,7 +328,7 @@ export default function AdminPaymentsPage() {
             <div className="md:w-1/2 p-6 flex flex-col">
               <div className="flex justify-between items-start mb-4">
                 <h3 className="text-lg font-bold text-gray-800">ตรวจสอบการชำระเงิน</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 transition-colors">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
