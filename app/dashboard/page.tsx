@@ -19,6 +19,9 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
+  // State สำหรับจัดการ Tab (current = ปัจจุบัน, history = ประวัติ/ยกเลิก)
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
+
   const [isModalMounted, setIsModalMounted] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [payAmount, setPayAmount] = useState(0);
@@ -38,6 +41,7 @@ export default function Dashboard() {
         start_date,
         end_date,
         status,
+        details,
         products!subscriptions_product_id_fkey (
           id,
           name,
@@ -78,7 +82,6 @@ export default function Dashboard() {
         .eq('id', session.user.id)
         .single();
 
-      // Logic ตำรวจจราจร: ถ้าเป็น Admin ให้เด้งไปหน้า Admin ทันที
       if (dbUser?.role === 'admin') {
         router.replace('/admin');
         return; 
@@ -124,6 +127,24 @@ export default function Dashboard() {
     setTimeout(() => setIsModalMounted(false), 300);
   };
 
+  // === ฟังก์ชันเช็กว่าหมดอายุแล้วหรือยัง (ให้ตรงกับ Logic ใน Card) ===
+  const isSubExpired = (sub: any) => {
+    const endDate = new Date(sub.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    const diffTime = endDate.getTime() - today.getTime();
+    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return sub.status === 'expired' || (daysLeft < 0 && sub.status !== 'pending' && sub.status !== 'cancelled');
+  };
+
+  // === กรองข้อมูลแยกตาม Tab ===
+  const currentSubs = subscriptions.filter(sub => sub.status !== 'cancelled' && !isSubExpired(sub));
+  const historySubs = subscriptions.filter(sub => sub.status === 'cancelled' || isSubExpired(sub));
+
+  const displaySubs = activeTab === 'current' ? currentSubs : historySubs;
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -140,29 +161,60 @@ export default function Dashboard() {
         
         <Header userProfile={userProfile} onLogout={handleLogout} />
 
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">สวัสดีคุณ, {userProfile.display_name}</h2>
           {userProfile.role === 'admin' && (
             <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded-md">Admin</span>
           )}
         </div>
 
+        {/* === ระบบ Tab Navigation === */}
+        <div className="flex bg-gray-200/60 p-1 rounded-xl mb-6 shadow-inner">
+          <button
+            onClick={() => setActiveTab('current')}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+              activeTab === 'current' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
+            }`}
+          >
+            แพ็กเกจปัจจุบัน {currentSubs.length > 0 && `(${currentSubs.length})`}
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
+              activeTab === 'history' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
+            }`}
+          >
+            ประวัติ & ยกเลิก {historySubs.length > 0 && `(${historySubs.length})`}
+          </button>
+        </div>
+
         <section className="space-y-5">
           <div className="flex items-center justify-between ml-2 mb-4">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Current Plan</h3>
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+              {activeTab === 'current' ? 'Current Plan' : 'History Plan'}
+            </h3>
             
-            <StoreDrawer 
-              subscriptions={subscriptions}
-              onRefresh={() => fetchSubscriptions(userProfile.id)} 
-            />
+            {/* แสดงปุ่มสโตร์เฉพาะในหน้าแพ็กเกจปัจจุบัน */}
+            {activeTab === 'current' && (
+              <StoreDrawer 
+                subscriptions={subscriptions}
+                onRefresh={() => fetchSubscriptions(userProfile.id)} 
+              />
+            )}
           </div>
 
-          {subscriptions.length === 0 ? (
+          {/* === ส่วนแสดงรายการการ์ด === */}
+          {displaySubs.length === 0 ? (
             <div className="bg-transparent border border-dashed border-gray-300 p-8 rounded-[2rem] flex flex-col items-center justify-center text-center">
-              <p className="text-gray-400 text-sm font-medium">ยังไม่มีแพ็กเกจที่ใช้งานในขณะนี้</p>
+              <p className="text-gray-400 text-sm font-medium">
+                {activeTab === 'current' 
+                  ? 'ยังไม่มีแพ็กเกจที่ใช้งานในขณะนี้' 
+                  : 'ยังไม่มีประวัติการใช้งานหรือยกเลิกแพ็กเกจ'
+                }
+              </p>
             </div>
           ) : (
-            subscriptions.map((sub) => (
+            displaySubs.map((sub) => (
               <SubscriptionCard 
                 key={sub.id} 
                 sub={sub} 

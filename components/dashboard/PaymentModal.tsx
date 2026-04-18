@@ -1,7 +1,7 @@
 // src/components/dashboard/PaymentModal.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
@@ -21,6 +21,13 @@ export default function PaymentModal({
   isMounted, isVisible, onClose, payAmount, qrPayload, selectedSubId, userProfile, onSuccess
 }: PaymentModalProps) {
   const [isVerifying, setIsVerifying] = useState(false);
+
+  // เคลียร์ State ทุกครั้งที่ Modal ถูกเปิดขึ้นมาใหม่
+  useEffect(() => {
+    if (isVisible) {
+      setIsVerifying(false);
+    }
+  }, [isVisible]);
 
   const handleUploadSlip = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -56,14 +63,14 @@ export default function PaymentModal({
       onSuccess();
       onClose();
 
-      // 2. เปลี่ยนจากการใช้ alert() โบราณ มาใช้ SweetAlert2 สวยๆ
+      // เปลี่ยนจากการใช้ alert() โบราณ มาใช้ SweetAlert2 สวยๆ
       setTimeout(() => {
         if (result.pendingAdmin) {
           Swal.fire({
             icon: 'info',
             title: 'ส่งสลิปเรียบร้อย',
             html: 'ระบบได้รับข้อมูลแล้ว<br>กรุณารอแอดมินตรวจสอบนะคะ',
-            confirmButtonColor: '#111827', // สีเทาดำให้เข้ากับธีม
+            confirmButtonColor: '#111827',
             customClass: {
               popup: 'rounded-2xl'
             }
@@ -85,12 +92,12 @@ export default function PaymentModal({
       console.error('Payment flow error:', error);
       setIsVerifying(false);
 
-      // ✨ เปลี่ยน alert() ตรง Error ด้วย
+      // เปลี่ยน alert() ตรง Error ด้วย
       Swal.fire({
         icon: 'error',
         title: 'เกิดข้อผิดพลาด',
         text: error.message || 'ไม่สามารถทำรายการได้ กรุณาลองใหม่อีกครั้ง',
-        confirmButtonColor: '#ef4444', // สีแดง
+        confirmButtonColor: '#ef4444',
         customClass: {
           popup: 'rounded-2xl'
         }
@@ -115,7 +122,6 @@ export default function PaymentModal({
             </div>
           ) : (
             <div className="flex flex-col items-center text-center pt-2">
-              {/* ✨ เปลี่ยนลิงก์โลโก้ PromptPay ให้เสถียรขึ้น */}
               <img 
                 src="https://upload.wikimedia.org/wikipedia/commons/c/c5/PromptPay-logo.png" 
                 alt="PromptPay" 
@@ -124,7 +130,6 @@ export default function PaymentModal({
               <h3 className="text-xl font-extrabold text-gray-900 mb-1">สแกนเพื่อชำระเงิน</h3>
               <p className="text-xs text-gray-500 mb-6">ยอดเงินรวมเศษสตางค์เพื่อการยืนยันตัวตนอัตโนมัติ</p>
               
-              {/* ✨ ใส่เงื่อนไขป้องกัน QRCodeSVG หายวับ */}
               <div className="bg-white p-4 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.1)] mb-6 border border-gray-100 flex items-center justify-center min-h-[232px]">
                 {qrPayload ? (
                   <QRCodeSVG value={qrPayload} size={200} />

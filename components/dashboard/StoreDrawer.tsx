@@ -133,7 +133,7 @@ export default function StoreDrawer({
       Swal.fire({
         icon: 'success',
         title: 'ลงทะเบียนสำเร็จ',
-        text: 'รายการของคุณอยู่ในสถานะรอดำเนินการ กรุณารอแอดมินตรวจสอบ',
+        html: 'รายการของคุณอยู่ในสถานะรอดำเนินการ<br>กรุณารอแอดมินตรวจสอบ',
         confirmButtonColor: '#2563EB',
         confirmButtonText: 'ตกลง',
         customClass: { popup: 'rounded-2xl' }
