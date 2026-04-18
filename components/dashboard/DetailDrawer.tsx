@@ -12,6 +12,24 @@ interface DetailDrawerProps {
   userProfile: any;
 }
 
+const getBrandStyle = (category: string) => {
+  const safeCategory = category?.toLowerCase()?.trim() || '';
+  const styles: Record<string, { bg: string, logo: string }> = {
+    spotify: { bg: 'bg-[#191414]', logo: 'https://cdn.simpleicons.org/spotify/1DB954' },
+    netflix: { bg: 'bg-black', logo: 'https://cdn.simpleicons.org/netflix/E50914' },
+    youtube: { bg: 'bg-white border border-gray-100', logo: 'https://cdn.simpleicons.org/youtube/FF0000' },
+    disney: { bg: 'bg-white border border-gray-100', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg' },
+    hbo: { bg: 'bg-black', logo: 'https://cdn.simpleicons.org/hbo/ffffff' },
+    viu: { bg: 'bg-[#121212]', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a8/Viu_logo.svg' },
+    canva: { bg: 'bg-white border border-gray-100', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b8/Canva_logo.svg' },
+    google: { bg: 'bg-white border border-gray-100', logo: 'https://cdn.simpleicons.org/google/4285F4' },
+    apple: { bg: 'bg-black', logo: 'https://cdn.simpleicons.org/apple/ffffff' },
+    nintendo: { bg: 'bg-white border border-gray-100', logo: 'https://www.nintendo.co.jp/common/v2/img/ncommon/_common/logo/switch.svg' },
+    ms365: { bg: 'bg-white border border-gray-100', logo: 'https://files.brandlogos.net/svg/RwAX3bZKbl/microsoft-365-copilot-logo-brandlogos.net_78lfgdevk.svg' },
+  };
+  return styles[safeCategory] || { bg: 'bg-gray-50 border border-gray-200', logo: '' };
+};
+
 export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: DetailDrawerProps) {
   const [shouldRender, setShouldRender] = useState(false);
   const [showAnimation, setShowAnimation] = useState(false);
@@ -51,14 +69,27 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
 
   if (!shouldRender || !activeSub) return null;
 
+  const product = activeSub.products || {};
   const details = activeSub.details || {};
-  const isSpotify = activeSub.products.category === 'spotify';
+  
+  // เช็กว่าใช่ Spotify ไหม เพื่อโชว์ข้อมูลลิงก์เข้ากลุ่ม
+  const isSpotify = product.category?.toLowerCase().trim() === 'spotify';
+  
   const nextDate = details.nextBillingDate ? new Date(details.nextBillingDate).toLocaleDateString('th-TH', { 
     year: 'numeric', month: 'long', day: 'numeric' 
   }) : '-';
 
-  const basePrice = details.retailPrice || activeSub.products.price;
-  const stackedPayment = calculateStackedPayment(activeSub.end_date, basePrice, activeSub.products.category);
+  const basePrice = details.retailPrice || product.price;
+  const stackedPayment = calculateStackedPayment(activeSub.end_date, basePrice, product.category);
+
+  // จัดการการแสดงผล Logo และสีพื้นหลัง
+  const brandStyle = getBrandStyle(product.category);
+  const iconSource = product.icon || brandStyle.logo;
+  const isUrl = iconSource?.startsWith('http') || iconSource?.startsWith('data:image');
+  
+  const useDatabaseColor = product.bg_color && product.bg_color !== '#f3f4f6';
+  const containerStyle = useDatabaseColor ? { backgroundColor: product.bg_color } : {};
+  const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
 
   const showToast = (message: string) => {
     setToast({ show: true, message });
@@ -86,26 +117,29 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
         <div className="p-8 h-full overflow-y-auto space-y-10 scrollbar-hide relative z-0">
           <div className="flex justify-between items-start relative z-10">
             <div className="flex gap-5 items-start">
-              <div className="w-14 h-14 shrink-0 bg-white border border-gray-100 rounded-[1.2rem] flex items-center justify-center shadow-sm">
-                {isSpotify ? (
-                  <svg className="w-9 h-9 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.84.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.84.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+              
+              {/* กล่องแสดงผล Logo ที่อัปเดตใหม่ */}
+              <div 
+                className={`w-14 h-14 shrink-0 rounded-[1.2rem] flex items-center justify-center shadow-sm overflow-hidden ${fallbackClass}`}
+                style={containerStyle}
+              >
+                {isUrl ? (
+                  <img src={iconSource} alt={product.category} className="w-8 h-8 object-contain" />
+                ) : iconSource ? (
+                  <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconSource} />
                   </svg>
                 ) : (
-                  <svg className="w-8 h-8" viewBox="0 0 24 24">
-                    <path fill="#f35325" d="M11.4 24H0V12.6h11.4V24zM11.4 11.4H0V0h11.4v11.4z"/>
-                    <path fill="#81bc06" d="M24 24H12.6V12.6H24V24zM24 11.4H12.6V0H24v11.4z"/>
-                    <path fill="#05a6f0" d="M11.4 24H0V12.6h11.4V24z"/>
-                    <path fill="#ffba08" d="M24 24H12.6V12.6H24V24z"/>
-                  </svg>
+                  <span className="text-gray-400 font-black text-xl">{product.category?.substring(0, 2).toUpperCase()}</span>
                 )}
               </div>
+
               <div>
-                <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-md mb-2 inline-block ${isSpotify ? 'bg-[#CCF0D4] text-[#347144]' : 'bg-blue-50 text-blue-600'}`}>
-                  {activeSub.products.category}
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-md mb-2 inline-block bg-gray-100 text-gray-500">
+                  {product.category || 'PREMIUM'}
                 </span>
-                <h2 className="text-3xl font-black text-[#2D2D2D] leading-tight">{activeSub.products.name}</h2>
-                <p className="text-sm font-medium text-gray-400 mt-1">แพ็กเกจ{details.billingCycle || 'รายปี'}</p>
+                <h2 className="text-3xl font-black text-[#2D2D2D] leading-tight">{product.name}</h2>
+                <p className="text-sm font-medium text-gray-400 mt-1">แพ็กเกจ{details.billingCycle || 'รายเดือน'}</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2.5 bg-gray-50 text-gray-400 hover:text-gray-900 rounded-full transition-colors z-10 shrink-0">✕</button>
@@ -149,11 +183,11 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                   <div className="space-y-4">
                     <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                       <span className="text-sm font-medium text-gray-500">สถานะสมาชิก</span>
-                      <span className="text-sm font-bold text-[#2D2D2D]">แชร์แล้ว {details.currentMembers || 0} จาก {details.maxMembers || 0} คน</span>
+                      <span className="text-sm font-bold text-[#2D2D2D]">พร้อมใช้งานแล้ว</span>
                     </div>
                     <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
                       <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                        {details.note || 'บัญชีของท่านได้รับการผูก License เรียบร้อยแล้ว สามารถเข้าใช้งานผ่าน Email ส่วนตัวได้ทันที'}
+                        {details.note || 'บัญชีของท่านได้รับการผูก License เรียบร้อยแล้ว สามารถเข้าใช้งานได้ทันที'}
                       </p>
                     </div>
                   </div>
@@ -245,7 +279,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
             <section className="pt-4 space-y-3 pb-10">
               <button 
                 onClick={() => {
-                  const message = `🚨 แจ้งปัญหาการใช้งาน\n\nแพ็กเกจ: ${activeSub.products.name}\nบัญชี: ${userProfile?.email}\n\nรายละเอียดปัญหา: `;
+                  const message = `🚨 แจ้งปัญหาการใช้งาน\n\nแพ็กเกจ: ${product.name}\nบัญชี: ${userProfile?.email}\n\nรายละเอียดปัญหา: `;
                   const encodedText = encodeURIComponent(message);
                   window.open(`https://line.me/R/oaMessage/@367sxicn/?${encodedText}`, '_blank');
                 }} 
@@ -260,7 +294,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
               <button 
                 onClick={() => {
                   if(confirm('คุณต้องการแจ้งยกเลิกแพ็กเกจนี้ใช่หรือไม่? ระบบจะพาคุณไปยัง LINE เพื่อยืนยันกับแอดมิน')) {
-                    const message = `💔 แจ้งยกเลิกแพ็กเกจ / ออกจากกลุ่ม\n\nแพ็กเกจ: ${activeSub.products.name}\nบัญชี: ${userProfile?.email}\n\nเหตุผลที่ต้องการยกเลิก: `;
+                    const message = `💔 แจ้งยกเลิกแพ็กเกจ / ออกจากกลุ่ม\n\nแพ็กเกจ: ${product.name}\nบัญชี: ${userProfile?.email}\n\nเหตุผลที่ต้องการยกเลิก: `;
                     const encodedText = encodeURIComponent(message);
                     window.open(`https://line.me/R/oaMessage/@367sxicn/?${encodedText}`, '_blank');
                   }

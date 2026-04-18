@@ -1,3 +1,4 @@
+// src/app/admin/products/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -12,7 +13,26 @@ interface Product {
   description: string;
   is_active: boolean;
   icon?: string;
+  bg_color?: string;
 }
+
+const getBrandStyle = (category: string) => {
+  const safeCategory = category?.toLowerCase()?.trim() || '';
+  const styles: Record<string, { bg: string, logo: string }> = {
+    spotify: { bg: 'bg-[#191414]', logo: 'https://cdn.simpleicons.org/spotify/1DB954' },
+    netflix: { bg: 'bg-black', logo: 'https://cdn.simpleicons.org/netflix/E50914' },
+    youtube: { bg: 'bg-white border border-gray-100', logo: 'https://cdn.simpleicons.org/youtube/FF0000' },
+    disney: { bg: 'bg-white border border-gray-100', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg' },
+    hbo: { bg: 'bg-black', logo: 'https://cdn.simpleicons.org/hbo/ffffff' },
+    viu: { bg: 'bg-[#121212]', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a8/Viu_logo.svg' },
+    canva: { bg: 'bg-white border border-gray-100', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b8/Canva_logo.svg' },
+    google: { bg: 'bg-white border border-gray-100', logo: 'https://cdn.simpleicons.org/google/4285F4' },
+    apple: { bg: 'bg-black', logo: 'https://cdn.simpleicons.org/apple/ffffff' },
+    nintendo: { bg: 'bg-white border border-gray-100', logo: 'https://www.nintendo.co.jp/common/v2/img/ncommon/_common/logo/switch.svg' },
+    ms365: { bg: 'bg-white border border-gray-100', logo: 'https://files.brandlogos.net/svg/RwAX3bZKbl/microsoft-365-copilot-logo-brandlogos.net_78lfgdevk.svg' },
+  };
+  return styles[safeCategory] || { bg: 'bg-gray-50 border border-gray-200', logo: '' };
+};
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -26,19 +46,54 @@ export default function AdminProductsPage() {
     price: 0,
     description: '',
     is_active: true,
-    icon: ''
+    icon: '',
+    bg_color: '#f3f4f6'
   });
 
-  const toggleActiveStatus = async (id: string, currentStatus: boolean) => {
+  const toggleActiveStatus = async (id: string, currentStatus: boolean, productName: string) => {
+    const newStatus = !currentStatus;
+    const actionText = newStatus ? 'เปิดขาย' : 'ปิดการขาย';
+    const actionColor = newStatus ? '#10b981' : '#ef4444'; // สีเขียวสำหรับเปิด สีแดงสำหรับปิด
+
+    const confirmResult = await Swal.fire({
+      title: `ยืนยันการ${actionText}?`,
+      html: `คุณต้องการ${actionText}สินค้า <b>${productName}</b> ใช่หรือไม่?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: actionColor,
+      cancelButtonColor: '#9ca3af',
+      confirmButtonText: `ใช่, ${actionText}เลย!`,
+      cancelButtonText: 'ยกเลิก',
+      customClass: { popup: 'rounded-2xl' }
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
     try {
       const { error } = await supabase
         .from('products')
-        .update({ is_active: !currentStatus })
+        .update({ is_active: newStatus })
         .eq('id', id);
+        
       if (error) throw error;
-      fetchProducts(); // รีเฟรชตารางใหม่
+
+      Swal.fire({
+        icon: 'success',
+        title: 'สำเร็จ!',
+        text: `เปลี่ยนสถานะเป็น${actionText}เรียบร้อยแล้ว`,
+        confirmButtonColor: '#111827',
+        customClass: { popup: 'rounded-2xl' }
+      });
+      
+      fetchProducts();
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'เปลี่ยนสถานะไม่สำเร็จ', text: error.message });
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'เปลี่ยนสถานะไม่สำเร็จ', 
+        text: error.message, 
+        confirmButtonColor: '#ef4444',
+        customClass: { popup: 'rounded-2xl' }
+      });
     }
   };
 
@@ -54,10 +109,14 @@ export default function AdminProductsPage() {
   const handleOpenModal = (prod?: Product) => {
     if (prod) {
       setEditId(prod.id);
-      setFormData({ ...prod, icon: prod.icon || '' }); // ✨ ดึง icon เดิมมาใส่ฟอร์ม
+      setFormData({ 
+        ...prod, 
+        icon: prod.icon || '',
+        bg_color: prod.bg_color || '#f3f4f6'
+      });
     } else {
       setEditId(null);
-      setFormData({ name: '', category: 'Entertainment', price: 0, description: '', is_active: true, icon: '' });
+      setFormData({ name: '', category: 'Netflix', price: 0, description: '', is_active: true, icon: '', bg_color: '#f3f4f6' });
     }
     setIsModalOpen(true);
     setTimeout(() => setIsAnimating(true), 50);
@@ -71,180 +130,176 @@ export default function AdminProductsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        name: formData.name,
+        category: formData.category,
+        price: Number(formData.price),
+        description: formData.description,
+        is_active: formData.is_active,
+        icon: formData.icon,
+        bg_color: formData.bg_color
+      };
+
       if (editId) {
-        await supabase.from('products').update(formData).eq('id', editId);
+        const { data, error } = await supabase.from('products').update(payload).eq('id', editId).select();
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error('ฐานข้อมูลปฏิเสธการแก้ไข (โปรดตรวจสอบ RLS Policy)');
       } else {
-        await supabase.from('products').insert(formData);
+        const { data, error } = await supabase.from('products').insert([payload]).select();
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error('ฐานข้อมูลปฏิเสธการเพิ่มข้อมูล (โปรดตรวจสอบ RLS Policy)');
       }
+      
       handleCloseModal();
-      Swal.fire({ icon: 'success', title: 'สำเร็จ', confirmButtonColor: '#111827' });
+      Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
       fetchProducts();
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'พลาด', text: error.message });
+      console.error('Save Product Error:', error);
+      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error.message, confirmButtonColor: '#ef4444' });
     }
   };
 
-  if (isLoading) return <div className="p-10 text-center text-gray-500">กำลังโหลด...</div>;
+  if (isLoading) return <div className="p-10 flex justify-center"><div className="animate-spin w-8 h-8 border-4 border-gray-800 border-t-transparent rounded-full"></div></div>;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-100/50">
-        
-        {/* ข้อความหัวข้อ */}
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight leading-tight">
             จัดการสินค้า 
-            {/* ซ่อนวงเล็บให้เล็กลงและสีอ่อนลง เพื่อไม่ให้แย่งจุดเด่น */}
             <span className="text-gray-400 text-lg sm:text-xl font-medium block sm:inline mt-1 sm:mt-0 sm:ml-2">
               (Master Data)
             </span>
           </h1>
         </div>
-
-        {/* ปุ่มเพิ่มสินค้า */}
         <button 
           onClick={() => handleOpenModal()} 
           className="shrink-0 whitespace-nowrap w-full sm:w-auto inline-flex justify-center items-center gap-2 px-5 py-2.5 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-colors shadow-md"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           เพิ่มสินค้า
         </button>
-
       </div>
 
-      {/* ✨ ลด gap และ p-6 เป็น p-4 เพื่อให้ Card ดู Compact ขึ้น */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {products.map((prod) => (
-          <div key={prod.id} className="bg-white/80 backdrop-blur-lg border border-gray-100 p-4 rounded-2xl shadow-sm flex flex-col transition-all hover:shadow-md">
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-3">
-                {/* แสดง Icon ถ้ามี ถ้าไม่มีใช้รูปกล่อง */}
-                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0 border border-blue-100">
-                  {prod.icon ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={prod.icon} />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-                  )}
+        {products.map((prod) => {
+          const brandStyle = getBrandStyle(prod.category);
+          const iconSource = prod.icon || brandStyle.logo;
+          const isUrl = iconSource?.startsWith('http') || iconSource?.startsWith('data:image');
+          
+          // ใช้สีจาก DB หากตั้งค่าไว้ ถ้าไม่ได้ตั้ง (หรือเป็นค่าเริ่มต้น) ให้ถอยไปใช้ brandStyle.bg
+          const useDatabaseColor = prod.bg_color && prod.bg_color !== '#f3f4f6';
+          const containerStyle = useDatabaseColor ? { backgroundColor: prod.bg_color } : {};
+          const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
+
+          return (
+            <div key={prod.id} className="bg-white/80 backdrop-blur-lg border border-gray-100 p-4 rounded-2xl shadow-sm flex flex-col transition-all hover:shadow-md">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-4">
+                  
+                  {/* กล่องโลโก้ที่แสดงสีพื้นหลังแบบไดนามิก */}
+                  <div 
+                    className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 overflow-hidden shadow-sm ${fallbackClass}`}
+                    style={containerStyle}
+                  >
+                    {isUrl ? (
+                      <img src={iconSource} alt={prod.category} className="w-6 h-6 object-contain" />
+                    ) : iconSource ? (
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconSource} />
+                      </svg>
+                    ) : (
+                      <span className="text-gray-400 font-black text-lg">{prod.category?.substring(0, 2).toUpperCase()}</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-md inline-block mb-1">{prod.category}</span>
+                    <h3 className="text-base font-bold text-gray-800 leading-tight line-clamp-1">{prod.name}</h3>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md inline-block mb-1">{prod.category}</span>
-                  <h3 className="text-base font-bold text-gray-800 leading-tight line-clamp-1">{prod.name}</h3>
-                </div>
+                <p className="text-lg font-black text-gray-900 shrink-0 ml-2">฿{prod.price}</p>
               </div>
-              <p className="text-lg font-black text-gray-900 shrink-0 ml-2">฿{prod.price}</p>
+              
+              <p className="text-xs text-gray-500 mb-4 line-clamp-2 flex-1 mt-2">{prod.description || 'ไม่มีคำอธิบาย'}</p>
+              
+              <div className="flex gap-2 mt-auto pt-2 border-t border-gray-50">
+                <button onClick={() => handleOpenModal(prod)} className="flex-1 flex justify-center items-center gap-1.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors shadow-sm">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  แก้ไข
+                </button>
+                <button 
+                  onClick={() => toggleActiveStatus(prod.id, prod.is_active, prod.name)}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors border ${
+                    prod.is_active ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                  }`}
+                >
+                  {prod.is_active ? 'เปิดขาย' : 'ปิดการขาย'}
+                </button>
+              </div>
             </div>
-            
-            <p className="text-xs text-gray-500 mb-4 line-clamp-2 flex-1">{prod.description || 'ไม่มีคำอธิบาย'}</p>
-            
-            <div className="flex gap-2 mt-auto pt-2 border-t border-gray-50">
-              {/* เติม Icon ให้ปุ่มแก้ไข */}
-              <button 
-                onClick={() => handleOpenModal(prod)} 
-                className="flex-1 flex justify-center items-center gap-1.5 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors shadow-sm"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                แก้ไข
-              </button>
-              {/* เปลี่ยนปุ่มสถานะให้กดสลับไปมาได้ */}
-              <button 
-                onClick={() => toggleActiveStatus(prod.id, prod.is_active)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                  prod.is_active ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                }`}
-              >
-                {prod.is_active ? 'เปิดขาย' : 'ปิดการขาย'}
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Product Modal (โครงสร้างเดียวกับ Inventory) */}
       {isModalOpen && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
           <div className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-300 ${isAnimating ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}>
             <div className="relative px-6 py-5 flex justify-between items-center bg-gradient-to-r from-[#BCE2E8]/40 via-white to-[#BCE2E8]/20 border-b border-[#BCE2E8]/30 overflow-hidden">
               <div className="absolute top-0 right-0 w-40 h-40 bg-white/60 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#BCE2E8]/50 rounded-full blur-2xl -ml-10 -mb-10 pointer-events-none"></div>
-
-              {/* ข้อความหัวข้อสีดำเทาให้เข้ากับธีม */}
               <h3 className="text-lg font-bold text-gray-800 tracking-wide relative z-10 flex items-center gap-2">
-                {/* ไอคอนดวงดาวสีธีมที่เข้มขึ้นนิดหน่อยเพื่อให้มองเห็นชัด */}
-                <svg className="w-5 h-5 text-[#8ABAC2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
+                <svg className="w-5 h-5 text-[#8ABAC2]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
                 {editId ? 'แก้ไขข้อมูลสินค้า' : 'เพิ่มสินค้าใหม่'}
               </h3>
-              
-              {/* ปุ่มปิด Modal สไตล์คลีนๆ */}
-              <button 
-                type="button"
-                onClick={handleCloseModal} 
-                className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/60 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm transition-all"
-              >
-                ✕
-              </button>
+              <button type="button" onClick={handleCloseModal} className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/60 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm transition-all">✕</button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+
+            <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">ชื่อสินค้า</label>
-                <input type="text" placeholder="เช่น Spotify Premium" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors" />
+                <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors" />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">แบรนด์สินค้า (Brand)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="พิมพ์ชื่อแบรนด์ใหม่ หรือเลือกจากปุ่มด้านล่าง"
-                  value={formData.category}
-                  onChange={e => setFormData({...formData, category: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors"
-                />
-                
-                {/* ปุ่ม Quick Select สำหรับแบรนด์ฮิต (กดปุ๊บ ข้อความเข้า input ทันที) */}
-                <div className="flex flex-wrap gap-2 mt-2.5">
-                  {['Spotify', 'Netflix', 'YouTube', 'Microsoft', 'Apple', 'Google', 'Disney', 'HBO', 'Canva'].map(brand => (
-                    <button
-                      key={brand}
-                      type="button"
-                      onClick={() => setFormData({...formData, category: brand})}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors shadow-sm ${
-                        formData.category === brand 
-                          ? 'bg-gray-900 text-white border-gray-900' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {brand}
-                    </button>
-                  ))}
+              
+              {/* ปรับให้เป็น 1 คอลัมน์บนมือถือ และ 2 คอลัมน์บนจอใหญ่ เพื่อป้องกันการล้น */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">แบรนด์</label>
+                  <input type="text" required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors" />
+                </div>
+                <div className="overflow-hidden">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">สีพื้นหลังโลโก้</label>
+                  <div className="flex items-center gap-2">
+                    {/* เพิ่ม shrink-0 ป้องกันการหดตัว */}
+                    <input type="color" value={formData.bg_color} onChange={e => setFormData({...formData, bg_color: e.target.value})} className="w-10 h-10 p-0 border-0 rounded cursor-pointer shrink-0" />
+                    {/* เพิ่ม min-w-0 ป้องกันการขยายตัวจนล้นกรอบ */}
+                    <input type="text" value={formData.bg_color} onChange={e => setFormData({...formData, bg_color: e.target.value})} className="flex-1 min-w-0 px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white font-mono uppercase outline-none" />
+                  </div>
                 </div>
               </div>
+
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">ไอคอน (SVG Path) <span className="font-normal text-gray-400 text-xs">- ถ้ามี</span></label>
-                <input type="text" placeholder="M3 12l2-2m0 0l7..." value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors font-mono text-xs" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">ไอคอน (URL รูปภาพ หรือ SVG Path)</label>
+                <input type="text" placeholder="https://..." value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none font-mono text-xs" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* ปรับ Grid ตรงส่วนราคาและสถานะเช่นกันเพื่อความปลอดภัย */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">ราคา (บาท)</label>
-                  <input type="number" required value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors" />
+                  <input type="number" required value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">สถานะตั้งต้น</label>
-                  <div className="flex items-center gap-2 px-2 h-[42px] mt-1">
-                    <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({...formData, is_active: e.target.checked})} className="w-4 h-4 text-gray-900 rounded border-gray-300" />
-                    <label className="text-sm font-medium text-gray-700">เปิดขายทันที</label>
+                  <div className="flex items-center gap-2 h-[42px]">
+                    <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({...formData, is_active: e.target.checked})} className="w-4 h-4 text-gray-900 rounded border-gray-300 shrink-0" />
+                    <label className="text-sm font-medium text-gray-700 cursor-pointer" onClick={() => setFormData({...formData, is_active: !formData.is_active})}>เปิดขายทันที</label>
                   </div>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">รายละเอียด</label>
-                <textarea placeholder="คำอธิบายสินค้า..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors h-20 resize-none" />
+                <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none h-20 resize-none" />
               </div>
 
               <div className="pt-2 flex gap-3">

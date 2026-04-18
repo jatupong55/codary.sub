@@ -56,7 +56,7 @@ export default function PaymentModal({
       onSuccess();
       onClose();
 
-      // 2. ✨ เปลี่ยนจากการใช้ alert() โบราณ มาใช้ SweetAlert2 สวยๆ
+      // 2. เปลี่ยนจากการใช้ alert() โบราณ มาใช้ SweetAlert2 สวยๆ
       setTimeout(() => {
         if (result.pendingAdmin) {
           Swal.fire({
@@ -115,11 +115,25 @@ export default function PaymentModal({
             </div>
           ) : (
             <div className="flex flex-col items-center text-center pt-2">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/PromptPay-logo.png/1200px-PromptPay-logo.png" alt="PromptPay" className="h-6 mb-4" />
+              {/* ✨ เปลี่ยนลิงก์โลโก้ PromptPay ให้เสถียรขึ้น */}
+              <img 
+                src="https://upload.wikimedia.org/wikipedia/commons/c/c5/PromptPay-logo.png" 
+                alt="PromptPay" 
+                className="h-6 mb-4 object-contain" 
+              />
               <h3 className="text-xl font-extrabold text-gray-900 mb-1">สแกนเพื่อชำระเงิน</h3>
               <p className="text-xs text-gray-500 mb-6">ยอดเงินรวมเศษสตางค์เพื่อการยืนยันตัวตนอัตโนมัติ</p>
-              <div className="bg-white p-4 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.1)] mb-6 border border-gray-100">
-                <QRCodeSVG value={qrPayload} size={200} />
+              
+              {/* ✨ ใส่เงื่อนไขป้องกัน QRCodeSVG หายวับ */}
+              <div className="bg-white p-4 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.1)] mb-6 border border-gray-100 flex items-center justify-center min-h-[232px]">
+                {qrPayload ? (
+                  <QRCodeSVG value={qrPayload} size={200} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center space-y-3">
+                    <div className="w-10 h-10 border-4 border-gray-100 border-t-[#00C300] rounded-full animate-spin"></div>
+                    <span className="text-xs font-bold text-gray-400">กำลังสร้าง QR Code...</span>
+                  </div>
+                )}
               </div>
               <div className="bg-gray-50 w-full rounded-xl py-3 mb-6 border border-gray-200">
                 <p className="text-sm text-gray-500 mb-1">ยอดที่ต้องโอน (บาท)</p>

@@ -24,6 +24,7 @@ interface MasterAccount {
     status: string;
     products?: Product;
     subscriptions?: Subscription[];
+    details?: any; // เพิ่ม details
 }
 
 export default function AdminInventoryPage() {
@@ -31,12 +32,10 @@ export default function AdminInventoryPage() {
     const [accounts, setAccounts] = useState<MasterAccount[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
 
-    // State สำหรับ Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAnimating, setIsAnimating] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // State ฟอร์ม
     const [editId, setEditId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         product_id: '',
@@ -46,6 +45,13 @@ export default function AdminInventoryPage() {
         status: 'active'
     });
 
+    // State สำหรับรายละเอียด (jsonb)
+    const [editDetails, setEditDetails] = useState({
+        address: '',
+        inviteLink: '',
+        note: ''
+    });
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -53,7 +59,6 @@ export default function AdminInventoryPage() {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            // 1. ดึงข้อมูลสินค้ามาทำ Dropdown
             const { data: prodData } = await supabase
                 .from('products')
                 .select('id, name, category')
@@ -61,122 +66,100 @@ export default function AdminInventoryPage() {
 
             setProducts(prodData || []);
 
-            // 2. ดึงข้อมูลบ้าน พร้อมพ่วงข้อมูลแพ็กเกจย่อยมานับจำนวนคน
+            // ดึง details มาด้วย
             const { data: accData, error: accError } = await supabase
                 .from('master_accounts')
                 .select(`
-          id, email, password, max_slots, status,
+          id, email, password, max_slots, status, details,
           products!master_accounts_product_id_fkey ( id, name, category ),
           subscriptions!subscriptions_master_account_id_fkey ( id, status )
         `)
                 .order('created_at', { ascending: false });
 
             if (accError) throw accError;
-
             setAccounts((accData as any) || []);
-
         } catch (error: any) {
             console.error('Fetch Inventory Error:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'โหลดข้อมูลไม่สำเร็จ',
-                text: error.message,
-                confirmButtonColor: '#111827'
-            });
+            Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: error.message, confirmButtonColor: '#111827' });
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleOpenModal = (account?: MasterAccount) => {
-    if (account) {
-      setEditId(account.id);
-      setFormData({
-        product_id: account.products?.id || '',
-        email: account.email,
-        password: account.password || '',
-        max_slots: account.max_slots,
-        status: account.status
-      });
-    } else {
-      setEditId(null);
-      setFormData({
-        product_id: products.length > 0 ? products[0].id : '',
-        email: '',
-        password: '',
-        max_slots: 6,
-        status: 'active'
-      });
-    }
-    
-    // 1. สั่งให้ Modal ปรากฏใน DOM ก่อน (แต่ยังโปร่งใสอยู่)
-    setIsModalOpen(true);
-    
-    // 2. หน่วงเวลา 50ms แล้วค่อยเล่นแอนิเมชันเด้งขึ้นมา
-    setTimeout(() => setIsAnimating(true), 50);
-  };
+        if (account) {
+            setEditId(account.id);
+            setFormData({
+                product_id: account.products?.id || '',
+                email: account.email,
+                password: account.password || '',
+                max_slots: account.max_slots,
+                status: account.status
+            });
+            // ดึง details เดิมมาแสดงในฟอร์ม
+            setEditDetails({
+                address: account.details?.address || '',
+                inviteLink: account.details?.inviteLink || '',
+                note: account.details?.note || ''
+            });
+        } else {
+            setEditId(null);
+            setFormData({
+                product_id: products.length > 0 ? products[0].id : '',
+                email: '',
+                password: '',
+                max_slots: 6,
+                status: 'active'
+            });
+            setEditDetails({ address: '', inviteLink: '', note: '' });
+        }
+        
+        setIsModalOpen(true);
+        setTimeout(() => setIsAnimating(true), 50);
+    };
 
-  const handleCloseModal = () => {
-    // 1. เล่นแอนิเมชันเฟดออก/หดลง
-    setIsAnimating(false);
-    
-    // 2. หน่วงเวลา 300ms (เท่ากับความยาวแอนิเมชัน) ค่อยเอาออกจาก DOM
-    setTimeout(() => setIsModalOpen(false), 300);
-  };
+    const handleCloseModal = () => {
+        setIsAnimating(false);
+        setTimeout(() => setIsModalOpen(false), 300);
+    };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsProcessing(true);
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsProcessing(true);
 
-    try {
-      if (editId) {
-        const { error } = await supabase
-          .from('master_accounts')
-          .update({
+        const payload = {
             product_id: formData.product_id,
             email: formData.email,
             password: formData.password,
             max_slots: formData.max_slots,
-            status: formData.status
-          })
-          .eq('id', editId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('master_accounts')
-          .insert({
-            product_id: formData.product_id,
-            email: formData.email,
-            password: formData.password,
-            max_slots: formData.max_slots,
-            status: formData.status
-          });
-        if (error) throw error;
-      }
+            status: formData.status,
+            details: editDetails // 👈 โยน Object ก้อนนี้ไปบันทึก
+        };
 
-      // ✨ เปลี่ยนมาใช้ handleCloseModal() แทน setIsModalOpen(false) ดื้อๆ
-      handleCloseModal(); 
-      
-      Swal.fire({
-        icon: 'success',
-        title: 'บันทึกสำเร็จ',
-        text: editId ? 'อัปเดตข้อมูลบ้านเรียบร้อย' : 'เพิ่มบ้านหลังใหม่เรียบร้อย',
-        confirmButtonColor: '#111827',
-        customClass: { popup: 'rounded-2xl' }
-      });
-      await fetchData();
+        try {
+            if (editId) {
+                const { error } = await supabase.from('master_accounts').update(payload).eq('id', editId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('master_accounts').insert(payload);
+                if (error) throw error;
+            }
 
-    } catch (error: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'บันทึกไม่สำเร็จ',
-        text: error.message,
-        confirmButtonColor: '#ef4444'
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+            handleCloseModal(); 
+            Swal.fire({
+                icon: 'success',
+                title: 'บันทึกสำเร็จ',
+                text: editId ? 'อัปเดตข้อมูลบ้านเรียบร้อย' : 'เพิ่มบ้านหลังใหม่เรียบร้อย',
+                confirmButtonColor: '#111827',
+                customClass: { popup: 'rounded-2xl' }
+            });
+            await fetchData();
+        } catch (error: any) {
+            Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error.message, confirmButtonColor: '#ef4444' });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const handleDelete = async (id: string, email: string) => {
         const confirmResult = await Swal.fire({
@@ -194,38 +177,23 @@ export default function AdminInventoryPage() {
         if (!confirmResult.isConfirmed) return;
 
         try {
-            const { error } = await supabase
-                .from('master_accounts')
-                .delete()
-                .eq('id', id);
-
+            const { error } = await supabase.from('master_accounts').delete().eq('id', id);
             if (error) throw error;
 
-            Swal.fire({
-                icon: 'success',
-                title: 'ลบสำเร็จ!',
-                text: 'ลบข้อมูลบ้านออกจากระบบแล้ว',
-                confirmButtonColor: '#111827',
-                customClass: { popup: 'rounded-2xl' }
-            });
+            Swal.fire({ icon: 'success', title: 'ลบสำเร็จ!', text: 'ลบข้อมูลบ้านออกจากระบบแล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
             await fetchData();
         } catch (error: any) {
-            Swal.fire({
-                icon: 'error',
-                title: 'ลบไม่ได้',
-                text: error.code === '23503' ? 'ไม่สามารถลบได้เนื่องจากยังมีลูกค้าเชื่อมโยงกับบ้านนี้อยู่ (ให้ย้ายลูกค้าออกก่อน)' : error.message,
-                confirmButtonColor: '#ef4444'
-            });
+            Swal.fire({ icon: 'error', title: 'ลบไม่ได้', text: error.code === '23503' ? 'ไม่สามารถลบได้เนื่องจากยังมีลูกค้าเชื่อมโยงกับบ้านนี้อยู่ (ให้ย้ายลูกค้าออกก่อน)' : error.message, confirmButtonColor: '#ef4444' });
         }
     };
 
     if (isLoading) {
-        return (
-            <div className="h-full flex items-center justify-center min-h-[400px]">
-                <div className="animate-spin w-10 h-10 border-4 border-gray-800 border-t-transparent rounded-full"></div>
-            </div>
-        );
+        return <div className="h-full flex items-center justify-center min-h-[400px]"><div className="animate-spin w-10 h-10 border-4 border-gray-800 border-t-transparent rounded-full"></div></div>;
     }
+
+    // คำนวณเพื่อเช็กว่า Category ปัจจุบันที่เลือกใน Dropdown คืออะไร
+    const selectedProduct = products.find(p => p.id === formData.product_id);
+    const isSpotify = selectedProduct?.category?.toLowerCase().trim() === 'spotify';
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
@@ -258,7 +226,6 @@ export default function AdminInventoryPage() {
                         </thead>
                         <tbody className="text-sm">
                             {accounts.map((acc) => {
-                                // คำนวณจำนวนคนที่ Active ในบ้านนี้
                                 const usedSlots = acc.subscriptions?.filter(sub => sub.status === 'active').length || 0;
                                 const maxSlots = acc.max_slots;
                                 const percentFull = Math.min((usedSlots / maxSlots) * 100, 100);
@@ -283,10 +250,7 @@ export default function AdminInventoryPage() {
                                                 </span>
                                             </div>
                                             <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                                <div
-                                                    className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-green-500'}`}
-                                                    style={{ width: `${percentFull}%` }}
-                                                ></div>
+                                                <div className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${percentFull}%` }}></div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -296,18 +260,8 @@ export default function AdminInventoryPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right whitespace-nowrap">
                                             <div className="flex justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleOpenModal(acc)}
-                                                    className="px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors shadow-sm"
-                                                >
-                                                    แก้ไข
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(acc.id, acc.email)}
-                                                    className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors shadow-sm"
-                                                >
-                                                    ลบ
-                                                </button>
+                                                <button onClick={() => handleOpenModal(acc)} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors shadow-sm">แก้ไข</button>
+                                                <button onClick={() => handleDelete(acc.id, acc.email)} className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors shadow-sm">ลบ</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -332,26 +286,16 @@ export default function AdminInventoryPage() {
                         <div className="relative px-6 py-5 flex justify-between items-center bg-gradient-to-r from-[#BCE2E8]/40 via-white to-[#BCE2E8]/20 border-b border-[#BCE2E8]/30 overflow-hidden">
                             <div className="absolute top-0 right-0 w-40 h-40 bg-white/60 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#BCE2E8]/50 rounded-full blur-2xl -ml-10 -mb-10 pointer-events-none"></div>
-
-                            {/* ข้อความหัวข้อสีดำเทาให้เข้ากับธีม */}
                             <h3 className="text-lg font-bold text-gray-800 tracking-wide relative z-10 flex items-center gap-2">
                                 <svg className="w-5 h-5 text-[#8ABAC2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                 </svg>
                                 {editId ? 'แก้ไขข้อมูลบ้าน' : 'เพิ่มบ้านใหม่'}
                             </h3>
-
-                            {/* ปุ่มปิด Modal สไตล์คลีนๆ */}
-                            <button
-                                type="button"
-                                onClick={handleCloseModal}
-                                className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/60 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm transition-all"
-                            >
-                                ✕
-                            </button>
+                            <button type="button" onClick={handleCloseModal} className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/60 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm transition-all">✕</button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-6 space-y-4">
+                        <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">แพ็กเกจสินค้า</label>
                                 <select
@@ -361,9 +305,7 @@ export default function AdminInventoryPage() {
                                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors"
                                 >
                                     <option value="" disabled>-- เลือกแพ็กเกจ --</option>
-                                    {products.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name} ({p.category})</option>
-                                    ))}
+                                    {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.category})</option>)}
                                 </select>
                             </div>
 
@@ -403,6 +345,46 @@ export default function AdminInventoryPage() {
                                 </div>
                             </div>
 
+                            {/* ส่วนข้อมูลรายละเอียด (JSONB) */}
+                            <div className="pt-2 border-t border-gray-100 mt-4">
+                                <h4 className="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wider">ข้อมูลเพิ่มเติม (Details)</h4>
+                                
+                                {isSpotify ? (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">ที่อยู่ครอบครัว</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="กรอกที่อยู่สำหรับยืนยันตัวตน"
+                                                value={editDetails.address}
+                                                onChange={(e) => setEditDetails({ ...editDetails, address: e.target.value })}
+                                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-blue-400 outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">ลิงก์คำเชิญ (Invite Link)</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="https://www.spotify.com/th/family/join/..."
+                                                value={editDetails.inviteLink}
+                                                onChange={(e) => setEditDetails({ ...editDetails, inviteLink: e.target.value })}
+                                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-blue-400 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">หมายเหตุถึงลูกค้า (Note)</label>
+                                        <textarea 
+                                            placeholder="คำแนะนำ หรือข้อมูลการเข้าสู่ระบบ..."
+                                            value={editDetails.note}
+                                            onChange={(e) => setEditDetails({ ...editDetails, note: e.target.value })}
+                                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-blue-400 outline-none h-16 resize-none"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">สถานะบัญชี</label>
                                 <select
@@ -416,19 +398,8 @@ export default function AdminInventoryPage() {
                             </div>
 
                             <div className="pt-4 flex gap-3">
-                                {/* ... ปุ่มยกเลิกและบันทึก คงเดิม ... */}
-                                <button
-                                    type="button"
-                                    onClick={handleCloseModal}
-                                    className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
-                                >
-                                    ยกเลิก
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isProcessing || !formData.product_id}
-                                    className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50"
-                                >
+                                <button type="button" onClick={handleCloseModal} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors">ยกเลิก</button>
+                                <button type="submit" disabled={isProcessing || !formData.product_id} className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50">
                                     {isProcessing ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
                                 </button>
                             </div>

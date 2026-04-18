@@ -6,7 +6,13 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 
-// กำหนด Type ให้ข้อมูลที่ดึงมา
+interface PaymentData {
+  id: string;
+  status: string;
+  slip_url: string;
+  amount: number;
+}
+
 interface SubscriptionData {
   id: string;
   end_date: string;
@@ -14,7 +20,8 @@ interface SubscriptionData {
   master_account_id: string | null;
   users: { display_name: string; email: string };
   products: { id: string; name: string; category: string };
-  master_accounts?: { id: string; email: string }; // บ้านที่ลูกค้าอยู่
+  master_accounts?: { id: string; email: string };
+  payments?: PaymentData[];
 }
 
 interface MasterAccount {
@@ -29,29 +36,24 @@ export default function AdminCustomersPage() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([]);
   const [masterAccounts, setMasterAccounts] = useState<MasterAccount[]>([]);
   
-  // เพิ่ม State สำหรับจำว่ากำลังกดดูแพ็กเกจของใครอยู่
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
-  // State สำหรับ Modal จัดการลูกค้า
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [selectedSub, setSelectedSub] = useState<SubscriptionData | null>(null);
 
-  // State สำหรับฟอร์มใน Modal
   const [editEndDate, setEditEndDate] = useState('');
   const [editHouseId, setEditHouseId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 2. แก้ไขฟังก์ชันเปิด ให้มีแอนิเมชัน
   const openEditModal = (sub: SubscriptionData) => {
     setSelectedSub(sub);
     setEditEndDate(sub.end_date);
     setEditHouseId(sub.master_account_id || '');
     setIsModalOpen(true);
-    setTimeout(() => setIsAnimating(true), 50); // หน่วงเวลาให้เด้งขึ้นมา
+    setTimeout(() => setIsAnimating(true), 50);
   };
 
-  // 3. เพิ่มฟังก์ชันปิด Modal แบบนุ่มนิ่ม
   const handleCloseModal = () => {
     setIsAnimating(false);
     setTimeout(() => setIsModalOpen(false), 300);
@@ -64,27 +66,25 @@ export default function AdminCustomersPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 1. ดึงข้อมูลรายการแพ็กเกจของลูกค้าทั้งหมด (ใช้ Explicit Join ป้องกันบั๊ก)
       const { data: subData, error: subError } = await supabase
         .from('subscriptions')
         .select(`
           id, end_date, status, master_account_id,
           users!subscriptions_user_id_fkey ( id, display_name, email ),
           products!subscriptions_product_id_fkey ( id, name, category ),
-          master_accounts!subscriptions_master_account_id_fkey ( id, email )
+          master_accounts!subscriptions_master_account_id_fkey ( id, email ),
+          payments ( id, status, slip_url, amount )
         `)
         .order('end_date', { ascending: true });
 
       if (subError) throw subError;
 
-      // 2. ดึงข้อมูล "บ้าน" ทั้งหมด เพื่อเอามาทำ Dropdown ให้แอดมินเลือกจัดคนลงบ้าน
       const { data: houseData, error: houseError } = await supabase
         .from('master_accounts')
         .select('id, product_id, email, max_slots')
         .eq('status', 'active');
 
       if (houseError && houseError.code !== '42P01') { 
-        // ข้าม Error 42P01 (ตารางไม่มี) เผื่อบอสยังไม่ได้รัน SQL สร้างตาราง
         console.error('House Error:', houseError);
       }
 
@@ -104,33 +104,45 @@ export default function AdminCustomersPage() {
     }
   };
 
-  // บันทึกการแก้ไขข้อมูล
   const handleSave = async () => {
     if (!selectedSub) return;
     setIsProcessing(true);
 
     try {
-      const { error } = await supabase
+      // 1. อัปเดตข้อมูล Subscription ให้เป็น active และผูกบ้าน
+      const { error: subError } = await supabase
         .from('subscriptions')
         .update({
+          status: 'active',
           end_date: editEndDate,
-          master_account_id: editHouseId || null // ถ้าไม่ได้เลือกบ้าน ให้เป็น null
+          master_account_id: editHouseId || null
         })
         .eq('id', selectedSub.id);
 
-      if (error) throw error;
+      if (subError) throw subError;
+
+      // 2. ถ้ามี Payment ที่รอตรวจสอบ ให้อัปเดตเป็นสำเร็จ
+      const pendingPayment = selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+      if (pendingPayment) {
+        const { error: payError } = await supabase
+          .from('payments')
+          .update({ status: 'สำเร็จ' })
+          .eq('id', pendingPayment.id);
+        
+        if (payError) throw payError;
+      }
 
       handleCloseModal();
 
       Swal.fire({
         icon: 'success',
         title: 'บันทึกสำเร็จ',
-        text: 'อัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว',
+        text: 'อนุมัติและอัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว',
         confirmButtonColor: '#111827',
         customClass: { popup: 'rounded-2xl' }
       });
 
-      await fetchData(); // โหลดข้อมูลใหม่
+      await fetchData();
     } catch (error: any) {
       Swal.fire({
         icon: 'error',
@@ -151,10 +163,8 @@ export default function AdminCustomersPage() {
     );
   }
 
-  // Logic นำ Subscriptions ทั้งหมดมามัดรวมกันตาม Email ของลูกค้า
   const groupedUsers = Array.from(subscriptions.reduce((acc, sub) => {
     const email = sub.users?.email || 'unknown';
-    // ถ้ายังไม่มีอีเมลนี้ในตะกร้า ให้สร้างตะกร้าใหม่
     if (!acc.has(email)) {
       acc.set(email, {
         userId: (sub.users as any)?.id || email, 
@@ -163,7 +173,6 @@ export default function AdminCustomersPage() {
         subs: []
       });
     }
-    // เอาแพ็กเกจโยนใส่ตะกร้าของคนนั้นๆ
     acc.get(email).subs.push(sub);
     return acc;
   }, new Map()).values());
@@ -173,11 +182,10 @@ export default function AdminCustomersPage() {
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 tracking-tight">จัดการลูกค้าและบ้าน</h1>
-          <p className="text-gray-500 mt-2">ตรวจสอบวันหมดอายุ จัดคนลงบ้าน (Inventory) และต่ออายุด้วยมือ</p>
+          <p className="text-gray-500 mt-2">ตรวจสอบสลิป จัดคนลงบ้าน และจัดการวันหมดอายุ</p>
         </div>
       </div>
 
-      {/* Table */}
       <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -192,13 +200,12 @@ export default function AdminCustomersPage() {
             <tbody className="text-sm">
               {groupedUsers.map((user: any) => {
                 const isExpanded = expandedUserId === user.userId;
-                // นับว่าลูกค้าคนนี้มีกี่แพ็กเกจที่ยังไม่หมดอายุ
                 const activeCount = user.subs.filter((s: any) => s.status === 'active' && new Date(s.end_date) >= new Date()).length;
+                const pendingCount = user.subs.filter((s: any) => s.status === 'pending').length;
                 const totalCount = user.subs.length;
 
                 return (
                   <React.Fragment key={user.userId}>
-                    {/* 🟢 แถวหลัก: โชว์ข้อมูลสรุปของลูกค้า 1 คน */}
                     <tr className={`border-b border-gray-100/50 transition-colors ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-white/40'}`}>
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-800">{user.displayName}</div>
@@ -210,14 +217,21 @@ export default function AdminCustomersPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                          activeCount > 0 ? 'bg-[#CCF0D4] text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {activeCount > 0 ? `กำลังใช้งาน (${activeCount})` : 'หมดอายุทั้งหมด'}
-                        </span>
+                        {pendingCount > 0 ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-yellow-100 text-yellow-800">
+                            รออนุมัติ ({pendingCount})
+                          </span>
+                        ) : activeCount > 0 ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-[#CCF0D4] text-green-800">
+                            กำลังใช้งาน ({activeCount})
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-red-100 text-red-800">
+                            หมดอายุทั้งหมด
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {/* ปุ่มเปิด/ปิด แถวย่อย */}
                         <button
                           onClick={() => setExpandedUserId(isExpanded ? null : user.userId)}
                           className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors shadow-sm inline-flex items-center gap-1.5 ${
@@ -232,7 +246,6 @@ export default function AdminCustomersPage() {
                       </td>
                     </tr>
 
-                    {/* 🟢 แถวย่อย: โชว์รายการแพ็กเกจของลูกค้าคนนั้น (จะแสดงก็ต่อเมื่อกดปุ่มดูแพ็กเกจ) */}
                     {isExpanded && (
                       <tr>
                         <td colSpan={4} className="p-0 bg-gray-50/50 border-b border-gray-200 shadow-inner">
@@ -241,7 +254,7 @@ export default function AdminCustomersPage() {
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-200/50">
                                   <th className="pb-2 font-medium">ชื่อแพ็กเกจ</th>
-                                  <th className="pb-2 font-medium">บ้านที่ใช้งาน (Inventory)</th>
+                                  <th className="pb-2 font-medium">บ้านที่ใช้งาน</th>
                                   <th className="pb-2 font-medium">วันหมดอายุ</th>
                                   <th className="pb-2 font-medium">สถานะ</th>
                                   <th className="pb-2 font-medium text-right">จัดการ</th>
@@ -250,9 +263,19 @@ export default function AdminCustomersPage() {
                               <tbody>
                                 {user.subs.map((sub: any) => {
                                   const isExpired = new Date(sub.end_date) < new Date();
+                                  const pendingPayment = sub.payments?.find((p: any) => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+                                  const needsAttention = sub.status === 'pending' || pendingPayment;
+
                                   return (
                                     <tr key={sub.id} className="border-b border-gray-100/50 last:border-0 hover:bg-white/60">
-                                      <td className="py-3 text-sm text-gray-800 font-medium">{sub.products?.name || 'N/A'}</td>
+                                      <td className="py-3 text-sm text-gray-800 font-medium">
+                                        {sub.products?.name || 'N/A'}
+                                        {pendingPayment && (
+                                          <span className="ml-2 inline-flex items-center text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">
+                                            มีสลิปใหม่
+                                          </span>
+                                        )}
+                                      </td>
                                       <td className="py-3 text-sm">
                                         {sub.master_accounts ? (
                                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 text-[11px] shadow-sm">
@@ -263,25 +286,26 @@ export default function AdminCustomersPage() {
                                         )}
                                       </td>
                                       <td className="py-3 text-sm">
-                                        {/* ✨ ล็อก whitespace-nowrap ป้องกันวันตกบรรทัด */}
-                                        <span className={`whitespace-nowrap ${isExpired ? 'text-red-600 font-medium' : 'text-gray-800'}`}>
+                                        <span className={`whitespace-nowrap ${isExpired && sub.status !== 'pending' ? 'text-red-600 font-medium' : 'text-gray-800'}`}>
                                           {new Date(sub.end_date).toLocaleDateString('th-TH')}
                                         </span>
                                       </td>
                                       <td className="py-3 text-sm">
-                                        {/* ✨ ล็อก whitespace-nowrap ป้องกันสถานะตกบรรทัด */}
                                         <span className={`px-2 py-1 rounded-md text-[11px] font-medium whitespace-nowrap ${
+                                          sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                                           sub.status === 'active' && !isExpired ? 'bg-[#CCF0D4] text-green-800' : 'bg-red-100 text-red-800'
                                         }`}>
-                                          {isExpired ? 'หมดอายุ' : sub.status}
+                                          {sub.status === 'pending' ? 'รออนุมัติ' : isExpired ? 'หมดอายุ' : sub.status}
                                         </span>
                                       </td>
                                       <td className="py-3 text-right">
                                         <button
                                           onClick={() => openEditModal(sub)}
-                                          className="px-2.5 py-1 bg-white border border-blue-200 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-50 transition-colors shadow-sm"
+                                          className={`px-2.5 py-1 border rounded-md text-xs font-medium transition-colors shadow-sm ${
+                                            needsAttention ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                          }`}
                                         >
-                                          จัดการ
+                                          {needsAttention ? 'ตรวจสอบ' : 'จัดการ'}
                                         </button>
                                       </td>
                                     </tr>
@@ -308,7 +332,6 @@ export default function AdminCustomersPage() {
         </div>
       </div>
 
-      {/* Edit Modal */}
       {isModalOpen && selectedSub && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
           <div className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-300 ease-in-out ${isAnimating ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}>
@@ -316,15 +339,13 @@ export default function AdminCustomersPage() {
               <div className="absolute top-0 right-0 w-40 h-40 bg-white/60 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
               <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#BCE2E8]/50 rounded-full blur-2xl -ml-10 -mb-10 pointer-events-none"></div>
 
-              {/* ข้อความหัวข้อสีดำเทาให้เข้ากับธีม */}
               <h3 className="text-lg font-bold text-gray-800 tracking-wide relative z-10 flex items-center gap-2">
                 <svg className="w-5 h-5 text-[#8ABAC2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                จัดการข้อมูลลูกค้า
+                {selectedSub.status === 'pending' ? 'อนุมัติแพ็กเกจ' : 'จัดการข้อมูลลูกค้า'}
               </h3>
               
-              {/* ปุ่มปิด Modal สไตล์คลีนๆ */}
               <button 
                 type="button"
                 onClick={handleCloseModal} 
@@ -334,15 +355,32 @@ export default function AdminCustomersPage() {
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
-              {/* ข้อมูลลูกค้า */}
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 mb-2">
                 <p className="text-xs text-gray-500 uppercase font-semibold">ลูกค้า / แพ็กเกจ</p>
                 <p className="font-bold text-gray-800 text-sm mt-1">{selectedSub.users?.display_name} ({selectedSub.users?.email})</p>
                 <p className="text-sm text-blue-600 font-medium">{selectedSub.products?.name}</p>
               </div>
 
-              {/* เลือกบ้าน */}
+              {/* ส่วนแสดงสลิปโอนเงิน (แสดงเฉพาะเมื่อมี Payment รอตรวจสอบ) */}
+              {(() => {
+                const pendingPayment = selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+                if (pendingPayment && pendingPayment.slip_url) {
+                  return (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden mb-4">
+                      <div className="bg-gray-100 py-2 px-3 border-b border-gray-200">
+                        <span className="text-xs font-bold text-gray-700">สลิปชำระเงิน (รอตรวจสอบ)</span>
+                      </div>
+                      <img src={pendingPayment.slip_url} alt="Slip" className="w-full h-auto max-h-60 object-contain bg-gray-50" />
+                      <div className="p-2 bg-white text-center border-t border-gray-100">
+                        <span className="text-sm font-bold text-green-600">ยอดเงิน: ฿{pendingPayment.amount}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">จัดคนลงบ้าน (Master Account)</label>
                 <select
@@ -351,7 +389,6 @@ export default function AdminCustomersPage() {
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-gray-800 focus:border-gray-800 outline-none transition-colors"
                 >
                   <option value="">-- ไม่ระบุ (เว้นว่าง) --</option>
-                  {/* กรองแสดงเฉพาะบ้านที่ตรงกับ Product (เช่น บ้าน Spotify ให้เลือกเฉพาะคนซื้อ Spotify) */}
                   {masterAccounts
                     .filter(house => house.product_id === selectedSub.products?.id)
                     .map(house => (
@@ -362,9 +399,8 @@ export default function AdminCustomersPage() {
                 <p className="text-[11px] text-gray-500 mt-1.5">* เลือกอีเมลบ้าน (Family) เพื่อจัดสรรโควตาให้ลูกค้า</p>
               </div>
 
-              {/* วันหมดอายุ */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">แก้ตรงวันหมดอายุ (ต่ออายุด้วยมือ)</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">แก้ตรงวันหมดอายุ</label>
                 <input
                   type="date"
                   value={editEndDate}
@@ -385,7 +421,7 @@ export default function AdminCustomersPage() {
                   disabled={isProcessing}
                   className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50"
                 >
-                  {isProcessing ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                  {isProcessing ? 'กำลังบันทึก...' : selectedSub.status === 'pending' ? 'อนุมัติและบันทึก' : 'บันทึกข้อมูล'}
                 </button>
               </div>
             </div>

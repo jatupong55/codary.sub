@@ -38,13 +38,13 @@ export default function Dashboard() {
         start_date,
         end_date,
         status,
-        master_account,
-        details,
         products!subscriptions_product_id_fkey (
           id,
           name,
           category,
-          price
+          price,
+          icon,
+          bg_color
         ),
         payments!payments_subscription_id_fkey ( id, status )
       `)
@@ -78,15 +78,10 @@ export default function Dashboard() {
         .eq('id', session.user.id)
         .single();
 
-      // ---------------------------------------------------------
-      // เพิ่ม Logic ตำรวจจราจรตรงนี้: ถ้าเป็น Admin ให้เด้งไปหน้า Admin ทันที
-      // ---------------------------------------------------------
-      // console.log(dbUser);
-      // console.log(dbUser?.role);
-      // console.log(dbUser?.role === 'admin');
+      // Logic ตำรวจจราจร: ถ้าเป็น Admin ให้เด้งไปหน้า Admin ทันที
       if (dbUser?.role === 'admin') {
         router.replace('/admin');
-        return; // สั่ง return เพื่อหยุดการทำงานของโค้ดด้านล่างทันที
+        return; 
       }
 
       const fallbackAvatar = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTUwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNCQ0UyRTgiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iI0YzQ0ZFMCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI0NDRjBENCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSJ1cmwoI2cpIi8+PHBhdGggZD0iTTc1IDc1YzExLjA0NiAwIDIwLTguOTU0IDIwLTIwcy04Ljk1NC0yMC0yMC0yMC0yMCA4Ljk1NC0yMCAyMCA4Ljk1NCAyMCAyMCAyMHptMCAxMGMtMTMuMzMzIDAtNDAgNi42NjctNDAgMjB2MTBoODB2LTEwYzAtMTMuMzMzLTI2LjY2Ny0yMC00MC0yMHoiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuOCIvPjwvc3ZnPg==";
@@ -143,7 +138,6 @@ export default function Dashboard() {
     <main className="min-h-screen bg-gray-50 p-4 pb-20 relative">
       <div className="max-w-md mx-auto mt-6">
         
-        {/* Component 1: Header */}
         <Header userProfile={userProfile} onLogout={handleLogout} />
 
         <div className="mb-6 flex items-center justify-between">
@@ -154,11 +148,9 @@ export default function Dashboard() {
         </div>
 
         <section className="space-y-5">
-          {/* ปรับ Layout ตรงนี้ให้มี Component StoreDrawer อยู่ชิดขวาของ Current Plan */}
           <div className="flex items-center justify-between ml-2 mb-4">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Current Plan</h3>
             
-            {/* โยนฟังก์ชัน fetchSubscriptions ไปให้ StoreDrawer เพื่อให้รีเฟรชหน้าหลังจากสั่งซื้อสำเร็จ */}
             <StoreDrawer 
               subscriptions={subscriptions}
               onRefresh={() => fetchSubscriptions(userProfile.id)} 
@@ -171,7 +163,6 @@ export default function Dashboard() {
             </div>
           ) : (
             subscriptions.map((sub) => (
-              // Component 2: SubscriptionCard
               <SubscriptionCard 
                 key={sub.id} 
                 sub={sub} 
@@ -183,7 +174,6 @@ export default function Dashboard() {
         </section>
       </div>
       
-      {/* Component 3: DetailDrawer */}
       <DetailDrawer 
         isOpen={isDetailOpen} 
         onClose={handleCloseDetail} 
@@ -191,7 +181,6 @@ export default function Dashboard() {
         userProfile={userProfile} 
       />
 
-      {/* Component 4: PaymentModal */}
       <PaymentModal 
         isMounted={isModalMounted}
         isVisible={isModalVisible}
