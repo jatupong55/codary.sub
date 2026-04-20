@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 interface SubscriptionCardProps {
   sub: any;
   onOpenDetail: (sub: any) => void;
-  onOpenPayment: (basePrice: number, subId: string) => void;
+  onOpenPayment: (sub: any) => void;
 }
 
 const getBrandStyle = (category: string) => {
