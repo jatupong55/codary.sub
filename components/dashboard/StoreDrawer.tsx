@@ -174,13 +174,12 @@ export default function StoreDrawer({
 
       // ดึงราคาและยิงสัญญาณเปิดหน้า Payment ทันที!
       if (onCheckoutSuccess && insertedData && insertedData.length > 0) {
+        const selectedProduct = cart[0];
         const finalPrice = getDisplayPrice(cart[0]); // เพราะมีแค่ชิ้นเดียวแน่นอน
         const subId = insertedData[0].id;
         
         // ปั้นข้อความแจ้งเตือนเข้า LINE แอดมิน
         const alertMessage = `🛒 [ออเดอร์ใหม่] ลูกค้ากดสั่งซื้อแพ็กเกจ!\n----------------------\n👤 ลูกค้า: ${user.email}\n🛍️ แพ็กเกจ: ${selectedProduct.name}\n🔄 รอบบิล: ${billingCycle === 'yearly' ? 'รายปี' : 'รายเดือน'}\n💰 ยอดที่ต้องชำระ: ฿${finalPrice.toLocaleString('th-TH')}\n----------------------\n⏳ ลูกค้ากำลังเข้าสู่หน้าสแกนชำระเงิน แอดมินเตรียมรอตรวจสลิปได้เลยครับ!`;
-        
-        // ยิงแจ้งเตือนผ่าน API
         await sendLineAdmin(alertMessage).catch(e => console.error('LINE Notify Error:', e));
         setTimeout(() => {
             onCheckoutSuccess(finalPrice, subId);
