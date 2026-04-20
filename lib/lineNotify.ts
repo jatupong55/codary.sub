@@ -3,7 +3,7 @@
 
 export async function sendLineAdmin(message: string) {
   // ดึงค่าจาก Environment Variables
-  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const channelAccessToken = process.env.LINE_BOT_ACCESS_TOKEN;
   const adminUserId = process.env.LINE_ADMIN_USER_ID; // UID ของแอดมินที่ต้องการให้แจ้งเตือน
 
   if (!channelAccessToken || !adminUserId) {
