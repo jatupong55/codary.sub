@@ -112,7 +112,13 @@ export default function SubscriptionCard({ sub, onOpenDetail, onOpenPayment }: S
                 {product.name}
               </h4>
               <p className="text-xs text-gray-400 font-medium mt-0.5">
-                {isCancelled ? 'แพ็กเกจถูกยกเลิกแล้ว' : (isLocked && !isRejectedSlip ? 'รอการจัดสรร' : '-')}
+                {isCancelled 
+                  ? 'แพ็กเกจถูกยกเลิกแล้ว' 
+                  : (isLocked && !isRejectedSlip 
+                      ? 'รอการจัดสรร' 
+                      : sub.billing_cycle === 'yearly' ? 'รอบบิล: รายปี' : 'รอบบิล: รายเดือน'
+                    )
+                }
               </p>
             </div>
           </div>
@@ -206,7 +212,7 @@ export default function SubscriptionCard({ sub, onOpenDetail, onOpenPayment }: S
                 
                 {/* ปุ่มแบบ Animated Running Border พร้อมเฉดสีสดใสสุดๆ */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); onOpenPayment(stackedPayment.amount, sub.id); }}
+                  onClick={(e) => { e.stopPropagation(); onOpenPayment(sub); }}
                   className="relative inline-flex h-10 overflow-hidden rounded-xl p-[2.5px] transition-transform duration-300 hover:scale-105 active:scale-95 shadow-lg shadow-blue-500/30 group"
                 >
                   <span className="absolute inset-[-1000%] animate-[spin_1.5s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#00C300_0%,#3b82f6_25%,#a855f7_50%,#00C300_75%,#3b82f6_100%)]" />
@@ -220,7 +226,7 @@ export default function SubscriptionCard({ sub, onOpenDetail, onOpenPayment }: S
               </div>
             ) : isExpiringSoon ? (
               <button
-                onClick={(e) => { e.stopPropagation(); onOpenPayment(stackedPayment.amount, sub.id); }}
+                onClick={(e) => { e.stopPropagation(); onOpenPayment(sub); }}
                 className={`flex items-center gap-1.5 text-sm font-bold py-2.5 px-5 rounded-xl border border-white/60 shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all duration-200 ${stackedPayment.months > 1 ? 'bg-red-50 text-red-600' : 'bg-gradient-to-br from-[#CCF0D4] to-[#BCE2E8] text-[#2D2D2D]'}`}
               >
                 ต่ออายุ {stackedPayment.amount} ฿ {stackedPayment.months > 1 && <span className="text-[10px] ml-1 bg-red-100 px-1.5 py-0.5 rounded">x{stackedPayment.months}</span>}

@@ -122,14 +122,13 @@ export default function PaymentModal({
             </div>
           ) : (
             <div className="flex flex-col items-center text-center pt-2">
-              <img 
-                src="https://upload.wikimedia.org/wikipedia/commons/c/c5/PromptPay-logo.png" 
-                alt="PromptPay" 
-                className="h-6 mb-4 object-contain" 
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/c/c5/PromptPay-logo.png"
+                alt="PromptPay"
+                className="h-6 mb-4 object-contain"
               />
               <h3 className="text-xl font-extrabold text-gray-900 mb-1">สแกนเพื่อชำระเงิน</h3>
-              <p className="text-xs text-gray-500 mb-6">ยอดเงินรวมเศษสตางค์เพื่อการยืนยันตัวตนอัตโนมัติ</p>
-              
+
               <div className="bg-white p-4 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.1)] mb-6 border border-gray-100 flex items-center justify-center min-h-[232px]">
                 {qrPayload ? (
                   <QRCodeSVG value={qrPayload} size={200} />
@@ -142,7 +141,9 @@ export default function PaymentModal({
               </div>
               <div className="bg-gray-50 w-full rounded-xl py-3 mb-6 border border-gray-200">
                 <p className="text-sm text-gray-500 mb-1">ยอดที่ต้องโอน (บาท)</p>
-                <p className="text-3xl font-extrabold text-[#00C300] tracking-tight">{payAmount.toFixed(2)}</p>
+                <p className="text-3xl font-extrabold text-[#00C300] tracking-tight">
+                  {payAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
               </div>
               <label className="w-full bg-gray-900 hover:bg-black text-white font-semibold py-3.5 px-4 rounded-xl transition-all duration-200 cursor-pointer shadow-md text-center active:scale-95">
                 อัปโหลดรูปสลิป

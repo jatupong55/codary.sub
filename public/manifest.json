@@ -1,6 +1,6 @@
 {
-  "name": "Codary Sub",
-  "short_name": "Codary",
+  "name": "Codary Subscriber",
+  "short_name": "Codary.Sub",
   "description": "แพลตฟอร์มจัดการสตรีมมิ่งที่ง่ายที่สุด",
   "start_url": "/",
   "display": "standalone",

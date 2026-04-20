@@ -4,6 +4,12 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
+import { sendLineAdmin } from '@/lib/lineNotify';
+
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { format } from "date-fns";
+import { th } from "date-fns/locale";
 
 interface PaymentData {
   id: string;
@@ -16,6 +22,7 @@ interface SubscriptionData {
   id: string;
   end_date: string;
   status: string;
+  billing_cycle: string;
   master_account_id: string | null;
   details?: any;
   users: { display_name: string; email: string };
@@ -48,7 +55,27 @@ export default function AdminCustomersPage() {
 
   const openEditModal = (sub: SubscriptionData) => {
     setSelectedSub(sub);
-    setEditEndDate(sub.end_date);
+    
+    let defaultEndDate = sub.end_date ? sub.end_date.split('T')[0] : '';
+    
+    if (sub.status === 'pending') {
+      // [UPDATE] ใช้คอลัมน์ billing_cycle ตรงๆ ได้เลย
+      const isYearly = sub.billing_cycle === 'yearly'; 
+      const daysToAdd = isYearly ? 365 : 30;
+
+      let baseDate = new Date();
+      if (sub.end_date) {
+         const oldEndDate = new Date(sub.end_date);
+         if (oldEndDate > new Date()) {
+            baseDate = oldEndDate;
+         }
+      }
+      
+      baseDate.setDate(baseDate.getDate() + daysToAdd);
+      defaultEndDate = format(baseDate, 'yyyy-MM-dd');
+    }
+
+    setEditEndDate(defaultEndDate);
     setEditHouseId(sub.master_account_id || '');
     setIsModalOpen(true);
     setTimeout(() => setIsAnimating(true), 50);
@@ -69,7 +96,7 @@ export default function AdminCustomersPage() {
       const { data: subData, error: subError } = await supabase
         .from('subscriptions')
         .select(`
-          id, end_date, status, master_account_id, details,
+          id, end_date, status, master_account_id, details, billing_cycle,
           users!subscriptions_user_id_fkey ( id, display_name, email ),
           products!subscriptions_product_id_fkey ( id, name, category ),
           master_accounts!subscriptions_master_account_id_fkey ( id, email ),
@@ -134,7 +161,6 @@ export default function AdminCustomersPage() {
     }
   };
 
-  // === ฟังก์ชันใหม่: ปฏิเสธสลิป (Reject Slip) ===
   const handleRejectSlip = async (paymentId: string) => {
     const { value: rejectReason } = await Swal.fire({
       title: 'ปฏิเสธสลิป?',
@@ -155,7 +181,6 @@ export default function AdminCustomersPage() {
     if (rejectReason) {
       setIsProcessing(true);
       try {
-        // อัปเดตสถานะ Payment เป็น 'rejected' และใส่เหตุผล
         const { error } = await supabase
           .from('payments')
           .update({ 
@@ -166,8 +191,6 @@ export default function AdminCustomersPage() {
 
         if (error) throw error;
 
-        // ไม่ต้องอัปเดตสถานะ Subscription เพราะให้เป็น pending เหมือนเดิมเพื่อให้ลูกค้าเข้ามาแก้ตัวได้
-        
         Swal.fire({ icon: 'success', title: 'ปฏิเสธสลิปแล้ว', text: 'ระบบได้แจ้งให้ลูกค้าทราบเพื่อโอนเงินใหม่แล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         handleCloseModal();
         await fetchData();
@@ -235,8 +258,7 @@ export default function AdminCustomersPage() {
           if (error) throw error;
 
           const alertMessage = `🔴 [แจ้งเตือน] เตะลูกค้าออกจากระบบทันที!\n----------------------\n🛍️ แบรนด์: ${sub.products?.name}\n🏠 บ้าน: ${sub.master_accounts?.email || 'ยังไม่จัดบ้าน'}\n👤 ลูกค้า: ${sub.users?.email}\n📄 เหตุผล: ${reason}\n----------------------\n⚠️ แอดมินโปรดเข้าไปเตะอีเมลนี้ออกจาก Family ด่วน เพื่อคืนโควตา!`;
-          fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: alertMessage }) }).catch(e => console.error(e));
-
+          await sendLineAdmin(alertMessage).catch(e => console.error(e));
           Swal.fire({ icon: 'success', title: 'ยกเลิกสำเร็จ!', text: 'ลูกค้ารายนี้ถูกเตะออกจากแพ็กเกจทันที', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         } else if (mode === 'end_of_period') {
           const updatedDetails = { ...currentDetails, cancelAtPeriodEnd: true, cancelReason: reason, cancelMode: 'end_of_period', cancelledAt: new Date().toISOString() };
@@ -244,7 +266,7 @@ export default function AdminCustomersPage() {
           if (error) throw error;
 
           const alertMessage = `🟡 [แจ้งเตือน] ลูกค้าแจ้งขอยกเลิกเมื่อหมดรอบบิล\n----------------------\n🛍️ แบรนด์: ${sub.products?.name}\n🏠 บ้าน: ${sub.master_accounts?.email || 'ยังไม่จัดบ้าน'}\n👤 ลูกค้า: ${sub.users?.email}\n📅 ใช้งานได้ถึง: ${new Date(sub.end_date).toLocaleDateString('th-TH')}\n📄 เหตุผล: ${reason}`;
-          fetch('/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: alertMessage }) }).catch(e => console.error(e));
+          await sendLineAdmin(alertMessage).catch(e => console.error(e));
 
           Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', text: `ระบบจะเตะลูกค้าออกอัตโนมัติเมื่อถึงวันที่ ${new Date(sub.end_date).toLocaleDateString('th-TH')}`, confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         }
@@ -332,6 +354,7 @@ export default function AdminCustomersPage() {
                               <thead>
                                 <tr className="text-xs text-gray-400 border-b border-gray-200/50">
                                   <th className="pb-2 font-medium">ชื่อแพ็กเกจ</th>
+                                  <th className="pb-2 font-medium">รอบบิล</th>
                                   <th className="pb-2 font-medium">บ้านที่ใช้งาน</th>
                                   <th className="pb-2 font-medium">วันหมดอายุ</th>
                                   <th className="pb-2 font-medium">สถานะ</th>
@@ -354,6 +377,13 @@ export default function AdminCustomersPage() {
                                         )}
                                       </td>
                                       <td className="py-3 text-sm">
+                                        {sub.billing_cycle === 'yearly' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
+                                        )}
+                                      </td>
+                                      <td className="py-3 text-sm">
                                         {sub.master_accounts ? (
                                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 text-[11px] shadow-sm">{sub.master_accounts.email}</span>
                                         ) : (
@@ -362,7 +392,7 @@ export default function AdminCustomersPage() {
                                       </td>
                                       <td className="py-3 text-sm">
                                         <span className={`whitespace-nowrap ${isExpired && sub.status !== 'pending' ? 'text-red-600 font-medium' : 'text-gray-800'}`}>
-                                          {new Date(sub.end_date).toLocaleDateString('th-TH')}
+                                          {new Date(sub.end_date).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                                         </span>
                                       </td>
                                       <td className="py-3 text-sm flex gap-1 items-center">
@@ -426,10 +456,31 @@ export default function AdminCustomersPage() {
             </div>
             
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 mb-2">
-                <p className="text-xs text-gray-500 uppercase font-semibold">ลูกค้า / แพ็กเกจ</p>
-                <p className="font-bold text-gray-800 text-sm mt-1">{selectedSub.users?.display_name} ({selectedSub.users?.email})</p>
-                <p className="text-sm text-blue-600 font-medium">{selectedSub.products?.name}</p>
+              
+              {/* ส่วนแสดงรายละเอียดแพ็กเกจ (รายเดือน/รายปี และราคา) */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-2">
+                <p className="text-xs text-gray-500 uppercase font-bold mb-2 tracking-wider">ข้อมูลลูกค้า & แพ็กเกจที่เลือก</p>
+                <div className="mb-2">
+                  <p className="font-bold text-gray-800 text-sm">{selectedSub.users?.display_name}</p>
+                  <p className="text-xs text-gray-500">{selectedSub.users?.email}</p>
+                </div>
+                
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200 border-dashed">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-blue-600">{selectedSub.products?.name}</p>
+                    {/* เช็กและแสดง Badge รายปี/รายเดือน */}
+                    {selectedSub.billing_cycle === 'yearly' ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
+                    )}
+                  </div>
+                  {selectedSub.details?.expectedPrice && (
+                    <p className="text-sm font-black text-green-600">
+                      ฿{Number(selectedSub.details.expectedPrice).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* ส่วนแสดงสลิปโอนเงิน และปุ่มปฏิเสธ */}
@@ -454,7 +505,6 @@ export default function AdminCustomersPage() {
                     </div>
                   );
                 } else if (selectedSub.status === 'pending') {
-                  // ถ้าสถานะเป็น pending แต่ไม่มีสลิป ให้โชว์คำเตือน
                   return (
                     <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl mb-4">
                       <p className="text-xs text-orange-600 font-bold flex items-center gap-2">
@@ -482,20 +532,29 @@ export default function AdminCustomersPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">แก้ตรงวันหมดอายุ</label>
-                <input
-                  type="date"
-                  value={editEndDate}
-                  onChange={(e) => setEditEndDate(e.target.value)}
+              <div className="relative z-[100]">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex justify-between">
+                  <span>วันหมดอายุ</span>
+                  {selectedSub.status === 'pending' && (
+                    <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded font-bold">บวกวันให้อัตโนมัติแล้ว ✨</span>
+                  )}
+                </label>
+                <DatePicker
+                  selected={editEndDate ? new Date(editEndDate) : null}
+                  onChange={(date: Date | null) => {
+                    setEditEndDate(date ? format(date, 'yyyy-MM-dd') : '');
+                  }}
+                  dateFormat="dd/MM/yyyy"
+                  locale={th}
+                  placeholderText="วัน/เดือน/ปี"
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-gray-800 outline-none transition-all"
+                  wrapperClassName="w-full"
                 />
               </div>
 
               <div className="pt-4 flex gap-3">
                 <button onClick={handleCloseModal} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors">ยกเลิก</button>
                 
-                {/* ล็อคปุ่มอนุมัติ ถ้าเป็น pending แต่ยังไม่มีสลิป */}
                 {selectedSub.status === 'pending' && !selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending') ? (
                   <button disabled className="flex-1 py-2.5 bg-gray-200 text-gray-400 font-medium rounded-xl cursor-not-allowed">
                     รอลูกค้าแนบสลิป

@@ -17,6 +17,7 @@ interface Payment {
   subscriptions: {
     id: string;
     end_date: string;
+    billing_cycle: string; // [NEW] เพิ่มรอบบิล
     products: { name: string; category: string; price: number };
   };
 }
@@ -77,7 +78,7 @@ export default function AdminPaymentsPage() {
         id, amount, status, slip_url, method, created_at,
         users ( display_name, email ),
         subscriptions!payments_subscription_id_fkey ( 
-          id, end_date, 
+          id, end_date, billing_cycle,
           products!subscriptions_product_id_fkey ( name, category, price ) 
         )
       `)
@@ -89,27 +90,31 @@ export default function AdminPaymentsPage() {
     setIsLoading(false);
   };
 
-  // ฟังก์ชันคำนวณวันหมดอายุใหม่ (บวกเพิ่ม 1 เดือน)
-  const calculateNewEndDate = (currentEndDate: string) => {
-    const date = new Date(currentEndDate);
-    // กรณีที่หมดอายุไปแล้ว ให้เริ่มนับจากวันนี้
-    if (date < new Date()) {
-      const today = new Date();
-      today.setMonth(today.getMonth() + 1);
-      return today.toISOString();
+  // [UPDATE] ฟังก์ชันคำนวณวันหมดอายุใหม่ ให้รองรับรายเดือน/รายปี
+  const calculateNewEndDate = (currentEndDate: string, billingCycle: string) => {
+    const isYearly = billingCycle === 'yearly';
+    const daysToAdd = isYearly ? 365 : 30;
+
+    let baseDate = new Date();
+    // ถ้าของเดิมยังไม่หมดอายุ ให้เอาวันเดิมเป็นตัวตั้งเพื่อทบยอด
+    if (currentEndDate) {
+      const date = new Date(currentEndDate);
+      if (date > new Date()) {
+        baseDate = date;
+      }
     }
-    // กรณีที่ยังไม่หมดอายุ ให้ทบไปอีก 1 เดือน
-    date.setMonth(date.getMonth() + 1);
-    return date.toISOString();
+    
+    baseDate.setDate(baseDate.getDate() + daysToAdd);
+    return baseDate.toISOString();
   };
 
-  // ฟังก์ชันอนุมัติสลิป
-  const handleApprove = async (paymentId: string, subId: string, currentEndDate: string) => {
+  // [UPDATE] รับค่า billingCycle เข้ามาเพิ่ม
+  const handleApprove = async (paymentId: string, subId: string, currentEndDate: string, billingCycle: string) => {
     setIsProcessing(true);
     try {
-      const newEndDate = calculateNewEndDate(currentEndDate);
+      const newEndDate = calculateNewEndDate(currentEndDate, billingCycle);
 
-      // 1. อัปเดตสถานะ payment และดักจับ Error
+      // 1. อัปเดตสถานะ payment 
       const { error: paymentError } = await supabase
         .from('payments')
         .update({ status: 'สำเร็จ' })
@@ -117,7 +122,7 @@ export default function AdminPaymentsPage() {
 
       if (paymentError) throw paymentError;
 
-      // 2. อัปเดตวันหมดอายุของ subscription และดักจับ Error
+      // 2. อัปเดตวันหมดอายุของ subscription
       const { error: subError } = await supabase
         .from('subscriptions')
         .update({ end_date: newEndDate, status: 'active' })
@@ -127,7 +132,6 @@ export default function AdminPaymentsPage() {
 
       handleCloseModal();
       
-      // แจ้งเตือนสวยๆ ว่าสำเร็จแล้ว
       Swal.fire({
         icon: 'success',
         title: 'อนุมัติสำเร็จ!',
@@ -136,7 +140,7 @@ export default function AdminPaymentsPage() {
         customClass: { popup: 'rounded-2xl' }
       });
 
-      await fetchPayments(); // โหลดข้อมูลใหม่
+      await fetchPayments(); 
     } catch (error: any) {
       console.error('Approval error:', error);
       Swal.fire({
@@ -151,26 +155,23 @@ export default function AdminPaymentsPage() {
     }
   };
 
-  // ฟังก์ชันปฏิเสธสลิป
   const handleReject = async (paymentId: string) => {
-    // 1. ถามยืนยันด้วย SweetAlert2 สวยๆ
     const confirmResult = await Swal.fire({
       title: 'ยืนยันการปฏิเสธ?',
       text: "คุณต้องการปฏิเสธและยกเลิกรายการนี้ใช่หรือไม่?",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#ef4444', // สีแดงสื่อถึงการยกเลิก/อันตราย
-      cancelButtonColor: '#9ca3af',  // สีเทา
+      confirmButtonColor: '#ef4444', 
+      cancelButtonColor: '#9ca3af',  
       confirmButtonText: 'ใช่, ปฏิเสธรายการ',
       cancelButtonText: 'ยกเลิก',
       customClass: { popup: 'rounded-2xl' }
     });
 
-    if (!confirmResult.isConfirmed) return; // ถ้ากดยกเลิกก็หยุดการทำงานตรงนี้
+    if (!confirmResult.isConfirmed) return; 
 
     setIsProcessing(true);
     try {
-      // 2. อัปเดตฐานข้อมูลและดักจับ Error
       const { error } = await supabase
         .from('payments')
         .update({ status: 'ยกเลิก' })
@@ -180,7 +181,6 @@ export default function AdminPaymentsPage() {
 
       handleCloseModal();
 
-      // 3. แจ้งเตือนเมื่อทำรายการสำเร็จ
       Swal.fire({
         icon: 'success',
         title: 'ปฏิเสธรายการแล้ว',
@@ -189,7 +189,7 @@ export default function AdminPaymentsPage() {
         customClass: { popup: 'rounded-2xl' }
       });
 
-      await fetchPayments(); // โหลดข้อมูลมาแสดงใหม่
+      await fetchPayments(); 
     } catch (error: any) {
       console.error('Rejection error:', error);
       Swal.fire({
@@ -208,7 +208,7 @@ export default function AdminPaymentsPage() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center min-h-[400px]">
         <div className="animate-pulse flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-[#BCE2E8] border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</p>
@@ -255,27 +255,36 @@ export default function AdminPaymentsPage() {
                 <th className="px-6 py-4 font-medium">แพ็กเกจ</th>
                 <th className="px-6 py-4 font-medium">ยอดโอน</th>
                 <th className="px-6 py-4 font-medium">สถานะ</th>
-                <th className="px-6 py-4 font-medium">จัดการ</th>
+                <th className="px-6 py-4 font-medium text-right">จัดการ</th>
               </tr>
             </thead>
             <tbody className="text-sm">
               {filteredPayments.map((payment) => (
                 <tr key={payment.id} className="border-b border-gray-100/50 hover:bg-white/40 transition-colors">
                   <td className="px-6 py-4 text-gray-500">
-                    {new Date(payment.created_at).toLocaleString('th-TH')}
+                    {new Date(payment.created_at).toLocaleString('th-TH', { 
+                      year: 'numeric', month: '2-digit', day: '2-digit', 
+                      hour: '2-digit', minute: '2-digit' 
+                    })}
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-medium text-gray-800">{payment.users?.display_name || 'ไม่ระบุ'}</div>
                     <div className="text-xs text-gray-500">{payment.users?.email}</div>
                   </td>
-                  <td className="px-6 py-4 text-gray-600">
-                    {payment.subscriptions?.products?.name || 'N/A'}
+                  <td className="px-6 py-4">
+                    <div className="text-gray-800 font-medium">{payment.subscriptions?.products?.name || 'N/A'}</div>
+                    {/* [NEW] แสดงรอบบิลในตาราง */}
+                    {payment.subscriptions?.billing_cycle === 'yearly' ? (
+                      <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">รายปี</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">รายเดือน</span>
+                    )}
                   </td>
-                  <td className="px-6 py-4 font-medium text-gray-800">
-                    ฿{payment.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  <td className="px-6 py-4 font-medium text-green-600">
+                    ฿{Number(payment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-medium ${
                       payment.status === 'สำเร็จ' ? 'bg-[#CCF0D4] text-green-800' :
                       payment.status === 'รอตรวจสอบ' ? 'bg-yellow-100 text-yellow-800' :
                       'bg-red-100 text-red-800'
@@ -283,7 +292,7 @@ export default function AdminPaymentsPage() {
                       {payment.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 text-right">
                     <button
                       onClick={() => handleOpenModal(payment)}
                       className="px-3 py-1.5 bg-white border border-gray-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors shadow-sm"
@@ -305,15 +314,14 @@ export default function AdminPaymentsPage() {
         </div>
       </div>
 
-      {/* Slip Approval Modal (Glassmorphism) */}
+      {/* Slip Approval Modal */}
       {isModalOpen && selectedPayment && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
-          <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col md:flex-row overflow-hidden">
+          <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col md:flex-row overflow-hidden transform transition-all duration-300">
             
             {/* Left: Slip Image */}
-            <div className="md:w-1/2 bg-gray-100 p-4 flex items-center justify-center min-h-[300px]">
+            <div className="md:w-1/2 bg-gray-100 p-4 flex items-center justify-center min-h-[300px] relative">
               {selectedPayment.slip_url ? (
-                // ใช้ img ธรรมดาแทน Image ของ Next.js เพื่อความยืดหยุ่นในการแสดงภาพจาก External URL (Supabase Storage)
                 <img 
                   src={selectedPayment.slip_url} 
                   alt="Payment Slip" 
@@ -337,15 +345,37 @@ export default function AdminPaymentsPage() {
                 <div>
                   <label className="text-xs text-gray-500 uppercase font-semibold">ลูกค้า</label>
                   <p className="text-gray-800 font-medium">{selectedPayment.users?.display_name}</p>
+                  <p className="text-xs text-gray-500">{selectedPayment.users?.email}</p>
                 </div>
-                <div>
+                
+                <div className="border-t border-gray-100 pt-3">
                   <label className="text-xs text-gray-500 uppercase font-semibold">แพ็กเกจที่ต้องการต่ออายุ</label>
-                  <p className="text-gray-800 font-medium">{selectedPayment.subscriptions?.products?.name}</p>
-                  <p className="text-xs text-gray-500">วันหมดอายุเดิม: {new Date(selectedPayment.subscriptions?.end_date).toLocaleDateString('th-TH')}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-gray-800 font-bold">{selectedPayment.subscriptions?.products?.name}</p>
+                    {/* [NEW] ป้ายบอกรายเดือน/รายปี */}
+                    {selectedPayment.subscriptions?.billing_cycle === 'yearly' ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
+                    )}
+                  </div>
+                  
+                  {/* [NEW] แสดงพรีวิวว่าถ้ากดอนุมัติ วันหมดอายุจะเป็นวันไหน */}
+                  <div className="mt-2 text-xs bg-gray-50 p-2 rounded-lg border border-gray-100">
+                    <p className="text-gray-500 mb-1">วันหมดอายุเดิม: {selectedPayment.subscriptions?.end_date ? new Date(selectedPayment.subscriptions.end_date).toLocaleDateString('th-TH') : '-'}</p>
+                    {selectedPayment.status === 'รอตรวจสอบ' && (
+                      <p className="font-bold text-green-600">
+                        ➔ ต่ออายุถึง: {new Date(calculateNewEndDate(selectedPayment.subscriptions?.end_date, selectedPayment.subscriptions?.billing_cycle)).toLocaleDateString('th-TH')}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="p-3 bg-[#BCE2E8]/20 rounded-xl border border-[#BCE2E8]/50">
+
+                <div className="p-4 bg-[#BCE2E8]/20 rounded-xl border border-[#BCE2E8]/50 mt-2">
                   <label className="text-xs text-gray-500 uppercase font-semibold">ยอดเงินที่โอน</label>
-                  <p className="text-2xl font-bold text-gray-800">฿{selectedPayment.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  <p className="text-2xl font-black text-[#00C300] tracking-tight">
+                    ฿{Number(selectedPayment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </div>
               </div>
 
@@ -359,9 +389,9 @@ export default function AdminPaymentsPage() {
                     ปฏิเสธรายการ
                   </button>
                   <button
-                    onClick={() => handleApprove(selectedPayment.id, selectedPayment.subscriptions.id, selectedPayment.subscriptions.end_date)}
+                    onClick={() => handleApprove(selectedPayment.id, selectedPayment.subscriptions.id, selectedPayment.subscriptions.end_date, selectedPayment.subscriptions.billing_cycle)}
                     disabled={isProcessing}
-                    className="flex-1 py-2.5 bg-gray-800 text-white font-medium rounded-xl hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50"
                   >
                     {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
                   </button>

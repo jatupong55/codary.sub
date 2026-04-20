@@ -1,6 +1,7 @@
 // app/api/verify-slip/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendLineAdmin } from '@/lib/lineNotify'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     const USE_BYPASS_SLIPOK = process.env.USE_BYPASS_SLIPOK === 'true';
 
     // ----------------------------------------------------------------------
-    // 🚦 ทางแยก A: เปิดโหมด BYPASS (ข้าม API, รอแอดมินตรวจแบบ Manual)
+    // ทางแยก A: เปิดโหมด BYPASS (ข้าม API, รอแอดมินตรวจแบบ Manual)
     // ----------------------------------------------------------------------
     if (USE_BYPASS_SLIPOK) {
       // 1. บันทึกลงตาราง payments ด้วยสถานะ 'รอตรวจสอบ'
@@ -37,16 +38,18 @@ export async function POST(request: Request) {
 
       if (insertError) throw insertError;
 
+      await sendLineAdmin(`มีสลิปใหม่รอตรวจสอบ!\nยอดเงิน: ${expectedAmount} บาท\nรหัสลูกค้า: ${userId}`);
+
       // 2. ส่งกลับให้ Frontend แจ้งเตือนลูกค้า
-      return NextResponse.json({ 
-        success: true, 
-        pendingAdmin: true, 
-        message: 'อัปโหลดสลิปเรียบร้อย กรุณารอตรวจสอบ' 
+      return NextResponse.json({
+        success: true,
+        pendingAdmin: true,
+        message: 'อัปโหลดสลิปเรียบร้อย กรุณารอตรวจสอบ'
       });
     }
 
     // ----------------------------------------------------------------------
-    // 🚦 ทางแยก B: ปิดโหมด BYPASS (ใช้ SlipOK ตรวจสอบอัตโนมัติ)
+    // ทางแยก B: ปิดโหมด BYPASS (ใช้ SlipOK ตรวจสอบอัตโนมัติ)
     // ----------------------------------------------------------------------
     const SLIPOK_API_KEY = process.env.SLIPOK_API_KEY;
     const SLIPOK_BRANCH_ID = process.env.SLIPOK_BRANCH_ID;
@@ -66,11 +69,11 @@ export async function POST(request: Request) {
     });
 
     const result = await response.json();
-    
+
     if (!result.success) {
       return NextResponse.json({ success: false, message: 'สลิปไม่ถูกต้อง หรือถูกใช้งานไปแล้ว' }, { status: 400 });
     }
-    
+
     if (result.data.amount !== expectedAmount) {
       return NextResponse.json({ success: false, message: `ยอดเงินไม่ถูกต้อง (ต้องการ ${expectedAmount} แต่โอนมา ${result.data.amount})` }, { status: 400 });
     }
@@ -92,47 +95,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: 'สลิปนี้ถูกใช้งานเข้าระบบไปแล้ว' }, { status: 400 });
     }
 
-    // 3. ดึงข้อมูลแพ็กเกจปัจจุบัน + details + category
+    // [UPDATE] ตรงสเตปที่ 3 ในโค้ดเดิม ให้เพิ่มการดึงคอลัมน์ billing_cycle
     const { data: subData, error: fetchSubError } = await supabaseAdmin
       .from('subscriptions')
-      .select('end_date, details, products ( category )')
+      .select('end_date, details, master_account_id, billing_cycle, products ( category )') // [NEW] ดึง billing_cycle
       .eq('id', subscriptionId)
       .single();
 
     if (fetchSubError) throw fetchSubError;
 
-    // 4. คำนวณวันหมดอายุใหม่ (โค้ดเดิมของคุณ)
     const productsData: any = subData.products;
     const category = Array.isArray(productsData) ? productsData[0]?.category : productsData?.category;
     const details = subData.details || {};
+
+    // ดึงรอบบิลจากตาราง subscriptions โดยตรง
+    const billingCycle = subData.billing_cycle || 'monthly';
     
     let currentEndDate = new Date(subData.end_date);
     const today = new Date();
     
+    // ปรับให้ใช้ Logic มาตรฐานเดียวกันทุกแพ็กเกจ
+    if (currentEndDate < today) {
+      currentEndDate = new Date(today);
+    }
+    
     let newEndDate = new Date(currentEndDate);
     let newNextBillingDate = details.nextBillingDate ? new Date(details.nextBillingDate) : new Date(currentEndDate);
 
-    if (category === 'spotify') {
-      const currentBillingMonth = today.getDate() >= 26 ? today.getMonth() + 1 : today.getMonth();
-      const endBillingMonth = currentEndDate.getMonth();
-      const monthsDiff = (today.getFullYear() * 12 + currentBillingMonth) - (currentEndDate.getFullYear() * 12 + endBillingMonth);
-      const monthsPaid = Math.max(1, 1 + monthsDiff);
-
-      newEndDate.setMonth(newEndDate.getMonth() + monthsPaid);
-      newNextBillingDate.setMonth(newNextBillingDate.getMonth() + monthsPaid);
+    // [NEW] คำนวณบวกเวลาตามประเภทที่ลูกค้าสมัคร (รายเดือน หรือ รายปี)
+    if (billingCycle === 'yearly' || billingCycle === 'รายปี') {
+      newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+      newNextBillingDate.setFullYear(newNextBillingDate.getFullYear() + 1);
     } else {
-      if (currentEndDate < today) {
-        newEndDate = new Date(today);
-        newNextBillingDate = new Date(today);
-      }
-      const billingCycle = details.billingCycle || 'รายปี';
-      if (billingCycle === 'รายเดือน') {
-        newEndDate.setMonth(newEndDate.getMonth() + 1);
-        newNextBillingDate.setMonth(newNextBillingDate.getMonth() + 1);
-      } else {
-        newEndDate.setFullYear(newEndDate.getFullYear() + 1);
-        newNextBillingDate.setFullYear(newNextBillingDate.getFullYear() + 1);
-      }
+      newEndDate.setMonth(newEndDate.getMonth() + 1);
+      newNextBillingDate.setMonth(newNextBillingDate.getMonth() + 1);
     }
 
     const updatedDetails = {
@@ -164,8 +160,9 @@ export async function POST(request: Request) {
         slip_url: slipUrl
       });
 
-    return NextResponse.json({ 
-      success: true, 
+    await sendLineAdmin(`ชำระเงินอัตโนมัติสำเร็จ!\nรหัสลูกค้า: ${userId}\nแพ็กเกจ: ${category}\n รบกวนแอดมินเข้าไประบุบัญชีบ้าน (Master Account) ให้ลูกค้าด้วยค่ะ`);
+    return NextResponse.json({
+      success: true,
       pendingAdmin: false,
       message: 'ต่ออายุแพ็กเกจอัตโนมัติสำเร็จ',
       newEndDate: newEndDate.toISOString()

@@ -10,6 +10,7 @@ interface Product {
   name: string;
   category: string;
   price: number;
+  yearly_price?: number; // [NEW] เพิ่ม type สำหรับราคารายปี
   description: string;
   is_active: boolean;
   icon?: string;
@@ -40,10 +41,12 @@ export default function AdminProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     category: '',
     price: 0,
+    yearly_price: 0, // [NEW] เพิ่ม state เก็บราคารายปี
     description: '',
     is_active: true,
     icon: '',
@@ -53,7 +56,7 @@ export default function AdminProductsPage() {
   const toggleActiveStatus = async (id: string, currentStatus: boolean, productName: string) => {
     const newStatus = !currentStatus;
     const actionText = newStatus ? 'เปิดขาย' : 'ปิดการขาย';
-    const actionColor = newStatus ? '#10b981' : '#ef4444'; // สีเขียวสำหรับเปิด สีแดงสำหรับปิด
+    const actionColor = newStatus ? '#10b981' : '#ef4444'; 
 
     const confirmResult = await Swal.fire({
       title: `ยืนยันการ${actionText}?`,
@@ -111,12 +114,14 @@ export default function AdminProductsPage() {
       setEditId(prod.id);
       setFormData({ 
         ...prod, 
+        yearly_price: prod.yearly_price || 0,
+        description: prod.description || '', // [UPDATE] ดักค่า null ให้เป็น string ว่าง
         icon: prod.icon || '',
         bg_color: prod.bg_color || '#f3f4f6'
       });
     } else {
       setEditId(null);
-      setFormData({ name: '', category: 'Netflix', price: 0, description: '', is_active: true, icon: '', bg_color: '#f3f4f6' });
+      setFormData({ name: '', category: 'Netflix', price: 0, yearly_price: 0, description: '', is_active: true, icon: '', bg_color: '#f3f4f6' });
     }
     setIsModalOpen(true);
     setTimeout(() => setIsAnimating(true), 50);
@@ -134,6 +139,7 @@ export default function AdminProductsPage() {
         name: formData.name,
         category: formData.category,
         price: Number(formData.price),
+        yearly_price: Number(formData.yearly_price) > 0 ? Number(formData.yearly_price) : null, // [NEW] ถ้าเป็น 0 ให้เก็บเป็น null
         description: formData.description,
         is_active: formData.is_active,
         icon: formData.icon,
@@ -187,7 +193,6 @@ export default function AdminProductsPage() {
           const iconSource = prod.icon || brandStyle.logo;
           const isUrl = iconSource?.startsWith('http') || iconSource?.startsWith('data:image');
           
-          // ใช้สีจาก DB หากตั้งค่าไว้ ถ้าไม่ได้ตั้ง (หรือเป็นค่าเริ่มต้น) ให้ถอยไปใช้ brandStyle.bg
           const useDatabaseColor = prod.bg_color && prod.bg_color !== '#f3f4f6';
           const containerStyle = useDatabaseColor ? { backgroundColor: prod.bg_color } : {};
           const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
@@ -197,7 +202,6 @@ export default function AdminProductsPage() {
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-4">
                   
-                  {/* กล่องโลโก้ที่แสดงสีพื้นหลังแบบไดนามิก */}
                   <div 
                     className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shrink-0 overflow-hidden shadow-sm ${fallbackClass}`}
                     style={containerStyle}
@@ -218,7 +222,16 @@ export default function AdminProductsPage() {
                     <h3 className="text-base font-bold text-gray-800 leading-tight line-clamp-1">{prod.name}</h3>
                   </div>
                 </div>
-                <p className="text-lg font-black text-gray-900 shrink-0 ml-2">฿{prod.price}</p>
+                
+                {/* [UPDATE] แสดงราคารายเดือนและรายปี (ถ้ามี) */}
+                <div className="text-right shrink-0 ml-2">
+                  <p className="text-lg font-black text-gray-900">฿{prod.price} <span className="text-[10px] font-medium text-gray-500">/ ด.</span></p>
+                  {prod.yearly_price ? (
+                    <p className="text-xs font-bold text-blue-600 mt-0.5">฿{prod.yearly_price} / ปี</p>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 mt-0.5">ไม่มีรายปี</p>
+                  )}
+                </div>
               </div>
               
               <p className="text-xs text-gray-500 mb-4 line-clamp-2 flex-1 mt-2">{prod.description || 'ไม่มีคำอธิบาย'}</p>
@@ -260,7 +273,6 @@ export default function AdminProductsPage() {
                 <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors" />
               </div>
               
-              {/* ปรับให้เป็น 1 คอลัมน์บนมือถือ และ 2 คอลัมน์บนจอใหญ่ เพื่อป้องกันการล้น */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">แบรนด์</label>
@@ -269,9 +281,7 @@ export default function AdminProductsPage() {
                 <div className="overflow-hidden">
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">สีพื้นหลังโลโก้</label>
                   <div className="flex items-center gap-2">
-                    {/* เพิ่ม shrink-0 ป้องกันการหดตัว */}
                     <input type="color" value={formData.bg_color} onChange={e => setFormData({...formData, bg_color: e.target.value})} className="w-10 h-10 p-0 border-0 rounded cursor-pointer shrink-0" />
-                    {/* เพิ่ม min-w-0 ป้องกันการขยายตัวจนล้นกรอบ */}
                     <input type="text" value={formData.bg_color} onChange={e => setFormData({...formData, bg_color: e.target.value})} className="flex-1 min-w-0 px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white font-mono uppercase outline-none" />
                   </div>
                 </div>
@@ -282,24 +292,34 @@ export default function AdminProductsPage() {
                 <input type="text" placeholder="https://..." value={formData.icon} onChange={e => setFormData({...formData, icon: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none font-mono text-xs" />
               </div>
 
-              {/* ปรับ Grid ตรงส่วนราคาและสถานะเช่นกันเพื่อความปลอดภัย */}
+              {/* [UPDATE] เพิ่มช่องกรอกราคารายปี ไว้คู่กับราคารายเดือน */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">ราคา (บาท)</label>
-                  <input type="number" required value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">ราคารายเดือน (฿)</label>
+                  <input type="number" required min="0" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">สถานะตั้งต้น</label>
-                  <div className="flex items-center gap-2 h-[42px]">
-                    <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({...formData, is_active: e.target.checked})} className="w-4 h-4 text-gray-900 rounded border-gray-300 shrink-0" />
-                    <label className="text-sm font-medium text-gray-700 cursor-pointer" onClick={() => setFormData({...formData, is_active: !formData.is_active})}>เปิดขายทันที</label>
-                  </div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">ราคารายปี (฿) *ใส่ 0 ถ้าไม่มี</label>
+                  <input type="number" min="0" value={formData.yearly_price} onChange={e => setFormData({...formData, yearly_price: Number(e.target.value)})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none" />
+                </div>
+              </div>
+
+              {/* ปรับย้ายสถานะมาไว้บรรทัดแยกเพื่อความสวยงามของฟอร์ม */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">สถานะตั้งต้น</label>
+                <div className="flex items-center gap-2 h-[42px] px-4 bg-gray-50 border border-gray-300 rounded-xl">
+                  <input type="checkbox" checked={formData.is_active} onChange={e => setFormData({...formData, is_active: e.target.checked})} className="w-4 h-4 text-gray-900 rounded border-gray-300 shrink-0" />
+                  <label className="text-sm font-medium text-gray-700 cursor-pointer w-full" onClick={() => setFormData({...formData, is_active: !formData.is_active})}>เปิดขายทันทีบนหน้าเว็บ</label>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">รายละเอียด</label>
-                <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none h-20 resize-none" />
+                <textarea 
+                  value={formData.description || ''} 
+                  onChange={e => setFormData({...formData, description: e.target.value})} 
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none h-20 resize-none" 
+                />
               </div>
 
               <div className="pt-2 flex gap-3">

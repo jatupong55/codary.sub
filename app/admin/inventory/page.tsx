@@ -4,6 +4,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { format } from "date-fns";
+import { th } from "date-fns/locale";
 
 interface Product {
     id: string;
@@ -22,9 +26,10 @@ interface MasterAccount {
     password?: string;
     max_slots: number;
     status: string;
+    next_renewal_date?: string; 
     products?: Product;
     subscriptions?: Subscription[];
-    details?: any; // เพิ่ม details
+    details?: any; 
 }
 
 export default function AdminInventoryPage() {
@@ -42,10 +47,10 @@ export default function AdminInventoryPage() {
         email: '',
         password: '',
         max_slots: 6,
-        status: 'active'
+        status: 'active',
+        next_renewal_date: '' // ใช้ string ปกติได้เลย Library จัดการให้
     });
 
-    // State สำหรับรายละเอียด (jsonb)
     const [editDetails, setEditDetails] = useState({
         address: '',
         inviteLink: '',
@@ -66,11 +71,10 @@ export default function AdminInventoryPage() {
 
             setProducts(prodData || []);
 
-            // ดึง details มาด้วย
             const { data: accData, error: accError } = await supabase
                 .from('master_accounts')
                 .select(`
-          id, email, password, max_slots, status, details,
+          id, email, password, max_slots, status, details, next_renewal_date, 
           products!master_accounts_product_id_fkey ( id, name, category ),
           subscriptions!subscriptions_master_account_id_fkey ( id, status )
         `)
@@ -94,9 +98,9 @@ export default function AdminInventoryPage() {
                 email: account.email,
                 password: account.password || '',
                 max_slots: account.max_slots,
-                status: account.status
+                status: account.status,
+                next_renewal_date: account.next_renewal_date ? account.next_renewal_date.split('T')[0] : ''
             });
-            // ดึง details เดิมมาแสดงในฟอร์ม
             setEditDetails({
                 address: account.details?.address || '',
                 inviteLink: account.details?.inviteLink || '',
@@ -109,7 +113,8 @@ export default function AdminInventoryPage() {
                 email: '',
                 password: '',
                 max_slots: 6,
-                status: 'active'
+                status: 'active',
+                next_renewal_date: ''
             });
             setEditDetails({ address: '', inviteLink: '', note: '' });
         }
@@ -133,7 +138,8 @@ export default function AdminInventoryPage() {
             password: formData.password,
             max_slots: formData.max_slots,
             status: formData.status,
-            details: editDetails // 👈 โยน Object ก้อนนี้ไปบันทึก
+            next_renewal_date: formData.next_renewal_date || null,
+            details: editDetails
         };
 
         try {
@@ -191,7 +197,6 @@ export default function AdminInventoryPage() {
         return <div className="h-full flex items-center justify-center min-h-[400px]"><div className="animate-spin w-10 h-10 border-4 border-gray-800 border-t-transparent rounded-full"></div></div>;
     }
 
-    // คำนวณเพื่อเช็กว่า Category ปัจจุบันที่เลือกใน Dropdown คืออะไร
     const selectedProduct = products.find(p => p.id === formData.product_id);
     const isSpotify = selectedProduct?.category?.toLowerCase().trim() === 'spotify';
 
@@ -211,7 +216,6 @@ export default function AdminInventoryPage() {
                 </button>
             </div>
 
-            {/* Table */}
             <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -220,7 +224,7 @@ export default function AdminInventoryPage() {
                                 <th className="px-6 py-4 font-medium">บัญชีบ้าน (Email)</th>
                                 <th className="px-6 py-4 font-medium">แพ็กเกจ (Product)</th>
                                 <th className="px-6 py-4 font-medium min-w-[200px]">โควตาที่ใช้ไป (Slots)</th>
-                                <th className="px-6 py-4 font-medium">สถานะ</th>
+                                <th className="px-6 py-4 font-medium">วันต่ออายุบ้าน</th> 
                                 <th className="px-6 py-4 font-medium text-right">จัดการ</th>
                             </tr>
                         </thead>
@@ -230,6 +234,8 @@ export default function AdminInventoryPage() {
                                 const maxSlots = acc.max_slots;
                                 const percentFull = Math.min((usedSlots / maxSlots) * 100, 100);
                                 const isFull = usedSlots >= maxSlots;
+
+                                const isExpired = acc.next_renewal_date && new Date(acc.next_renewal_date) < new Date();
 
                                 return (
                                     <tr key={acc.id} className="border-b border-gray-100/50 hover:bg-white/40 transition-colors">
@@ -253,10 +259,20 @@ export default function AdminInventoryPage() {
                                                 <div className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${percentFull}%` }}></div>
                                             </div>
                                         </td>
+                                        
+                                        {/* [UPDATE] แสดงผลในตารางแบบ วัน/เดือน/ปี (DD/MM/YYYY) */}
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${acc.status === 'active' ? 'bg-[#CCF0D4] text-green-800' : 'bg-gray-200 text-gray-600'}`}>
-                                                {acc.status}
-                                            </span>
+                                            {acc.next_renewal_date ? (
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${isExpired ? 'bg-red-100 text-red-700' : 'text-gray-700'}`}>
+                                                    {new Date(acc.next_renewal_date).toLocaleDateString('th-TH', {
+                                                        day: '2-digit',
+                                                        month: '2-digit',
+                                                        year: 'numeric'
+                                                    })}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs italic">ไม่ได้ระบุ</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-right whitespace-nowrap">
                                             <div className="flex justify-end gap-2">
@@ -279,7 +295,6 @@ export default function AdminInventoryPage() {
                 </div>
             </div>
 
-            {/* Form Modal */}
             {isModalOpen && (
                 <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
                     <div className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-300 ease-in-out ${isAnimating ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}>
@@ -345,7 +360,33 @@ export default function AdminInventoryPage() {
                                 </div>
                             </div>
 
-                            {/* ส่วนข้อมูลรายละเอียด (JSONB) */}
+                            {/* ส่วน Datepicker แบบ Modern ที่ส่งค่า YYYY-MM-DD เข้าฐานข้อมูลอัตโนมัติ */}
+                            <div className="relative z-[100]">
+                                <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex justify-between">
+                                    <span>กำหนดวันต่ออายุแพ็กเกจหลัก</span>
+                                    <span className="text-xs text-gray-400 font-normal">ไม่ต้องกรอกก็ได้</span>
+                                </label>
+                                <DatePicker
+                                    // 1. อ่านค่าจาก String YYYY-MM-DD มาโชว์เป็นปฏิทิน
+                                    selected={formData.next_renewal_date ? new Date(formData.next_renewal_date) : null}
+                                    
+                                    // 2. เมื่อกดเลือกวัน ให้แปลงกลับเป็น YYYY-MM-DD ส่งเข้า Database
+                                    onChange={(date: Date | null) => {
+                                        setFormData({ 
+                                            ...formData, 
+                                            next_renewal_date: date ? format(date, 'yyyy-MM-dd') : '' 
+                                        });
+                                    }}
+                                    dateFormat="dd/MM/yyyy"
+                                    locale={th}
+                                    placeholderText="วัน/เดือน/ปี"
+                                    isClearable
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all"
+                                    wrapperClassName="w-full"
+                                />
+                                <p className="text-[10px] text-gray-400 mt-1">ใช้เพื่อเตือนแอดมินว่าต้องนำเงินไปจ่ายต้นทางเมื่อไหร่</p>
+                            </div>
+
                             <div className="pt-2 border-t border-gray-100 mt-4">
                                 <h4 className="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wider">ข้อมูลเพิ่มเติม (Details)</h4>
                                 

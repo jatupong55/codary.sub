@@ -41,6 +41,7 @@ export default function Dashboard() {
         start_date,
         end_date,
         status,
+        billing_cycle,
         details,
         products!subscriptions_product_id_fkey (
           id,
@@ -87,7 +88,7 @@ export default function Dashboard() {
         return; 
       }
 
-      const fallbackAvatar = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTUwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNCQ0UyRTgiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iI0YzQ0ZFMCIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI0NDRjBENCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSJ1cmwoI2cpIi8+PHBhdGggZD0iTTc1IDc1YzExLjA0NiAwIDIwLTguOTU0IDIwLTIwcy04Ljk1NC0yMC0yMC0yMC0yMCA4Ljk1NC0yMCAyMCA4Ljk1NCAyMCAyMCAyMHptMCAxMGMtMTMuMzMzIDAtNDAgNi42NjctNDAgMjB2MTBoODB2LTEwYzAtMTMuMzMzLTI2LjY2Ny0yMC00MC0yMHoiIGZpbGw9IiNmZmZmZmYiIG9wYWNpdHk9IjAuOCIvPjwvc3ZnPg==";
+      const fallbackAvatar = process.env.NEXT_PUBLIC_FALLBACK_AVATAR || '';
 
       setUserProfile({
         id: session.user.id,
@@ -109,11 +110,18 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  const handleOpenPayment = (basePrice: number, subId: string) => {
-    const randomSatang = Math.floor(Math.random() * 99) + 1;
-    const finalPrice = basePrice + (randomSatang / 100);
+  // เปลี่ยนจากรับ basePrice เป็นรับ sub (ข้อมูลแพ็กเกจ) ทั้งก้อน
+  const handleOpenPayment = (sub: any) => {
+    // 1. ตรวจสอบว่ามี expectedPrice ใน details ไหม ถ้าไม่มีให้กลับไปใช้ราคาตั้งต้นของ product
+    const basePrice = sub.details?.expectedPrice || sub.products?.price || 0;
+    
+    // 2. สุ่มเศษสตางค์ (ตามโค้ดเดิมของคุณลูกค้า)
+    // const randomSatang = Math.floor(Math.random() * 99) + 1;
+    // const finalPrice = basePrice + (randomSatang / 100);
+    const finalPrice = basePrice;
+    
     setPayAmount(finalPrice);
-    setSelectedSubId(subId);
+    setSelectedSubId(sub.id);
 
     const payload = generatePayload(MY_PROMPTPAY_ID, { amount: finalPrice });
     setQrPayload(payload);
@@ -198,7 +206,16 @@ export default function Dashboard() {
             {activeTab === 'current' && (
               <StoreDrawer 
                 subscriptions={subscriptions}
-                onRefresh={() => fetchSubscriptions(userProfile.id)} 
+                onRefresh={() => fetchSubscriptions(userProfile.id)}
+                
+                // [NEW] โค้ดรับสัญญาณ และสร้าง Mock Data หลอกระบบให้เปิด Modal โอนเงิน
+                onCheckoutSuccess={(price, subId) => {
+                  const mockSubData = { 
+                    id: subId, 
+                    details: { expectedPrice: price } 
+                  };
+                  handleOpenPayment(mockSubData as any);
+                }}
               />
             )}
           </div>

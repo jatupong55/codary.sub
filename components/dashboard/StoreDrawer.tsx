@@ -24,16 +24,20 @@ const getBrandStyle = (category: string) => {
 
 export default function StoreDrawer({
   onRefresh,
-  subscriptions = []
+  subscriptions = [],
+  onCheckoutSuccess // [NEW] รับสัญญาณส่งต่อให้หน้า Payment
 }: {
   onRefresh?: () => void;
   subscriptions?: any[];
+  onCheckoutSuccess?: (price: number, subId: string) => void;
 }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   useEffect(() => {
     if (isDrawerOpen) {
@@ -50,7 +54,7 @@ export default function StoreDrawer({
           id, 
           max_slots, 
           status,
-          products ( id, name, category, price, icon, bg_color ), 
+          products ( id, name, category, price, yearly_price, icon, bg_color ),
           subscriptions ( id, status )
         `);
 
@@ -98,13 +102,27 @@ export default function StoreDrawer({
   };
 
   const addToCart = (product: any) => {
-    const isBrandInCart = cart.some(item => item.category === product.category);
-    if (isBrandInCart) return;
-    setCart([...cart, product]);
+    // [UPDATE] บังคับตะกร้าให้มีของแค่ชิ้นเดียวเสมอ! (เลือกใหม่ไปทับของเก่าเลย)
+    setCart([product]);
   };
 
   const removeFromCart = (productId: number) => {
     setCart(cart.filter(item => item.id !== productId));
+  };
+
+  const getDisplayPrice = (product: any) => {
+    if (billingCycle === 'yearly') {
+      return product.yearly_price || (product.price * 12); 
+    }
+    return product.price;
+  };
+
+  const calculateDiscountPercent = (monthlyPrice: number, yearlyPrice: number) => {
+    if (!yearlyPrice) return 0;
+    const fullPrice = monthlyPrice * 12;
+    if (yearlyPrice >= fullPrice) return 0;
+    const discount = ((fullPrice - yearlyPrice) / fullPrice) * 100;
+    return Math.round(discount);
   };
 
   const handleCheckout = async () => {
@@ -117,7 +135,12 @@ export default function StoreDrawer({
 
       const startDate = new Date();
       const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 1);
+      
+      if (billingCycle === 'yearly') {
+        endDate.setFullYear(endDate.getFullYear() + 1);
+      } else {
+        endDate.setMonth(endDate.getMonth() + 1);
+      }
 
       const newSubscriptions = cart.map(product => ({
         user_id: user.id,
@@ -125,23 +148,40 @@ export default function StoreDrawer({
         status: 'pending',
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString(),
+        billing_cycle: billingCycle,
+        details: { expectedPrice: getDisplayPrice(product) }
       }));
 
-      const { error } = await supabase.from('subscriptions').insert(newSubscriptions);
+      // [UPDATE] ใส่ .select() เพื่อให้ Supabase ส่งข้อมูลที่มี ID กลับมาให้เรา
+      const { data: insertedData, error } = await supabase
+        .from('subscriptions')
+        .insert(newSubscriptions)
+        .select();
+        
       if (error) throw error;
 
+      // ปิดหน้าต่าง Store และโชว์ข้อความแปปนึง
+      setIsDrawerOpen(false);
       Swal.fire({
         icon: 'success',
-        title: 'ลงทะเบียนสำเร็จ',
-        html: 'รายการของคุณอยู่ในสถานะรอดำเนินการ<br>กรุณารอแอดมินตรวจสอบ',
-        confirmButtonColor: '#2563EB',
-        confirmButtonText: 'ตกลง',
+        title: 'เตรียมการชำระเงิน',
+        html: 'ระบบกำลังสร้าง QR Code ให้คุณ...',
+        timer: 1500,
+        showConfirmButton: false,
         customClass: { popup: 'rounded-2xl' }
       });
 
-      setCart([]);
-      setIsDrawerOpen(false);
+      // ดึงราคาและยิงสัญญาณเปิดหน้า Payment ทันที!
+      if (onCheckoutSuccess && insertedData && insertedData.length > 0) {
+        const finalPrice = getDisplayPrice(cart[0]); // เพราะมีแค่ชิ้นเดียวแน่นอน
+        const subId = insertedData[0].id;
+        
+        setTimeout(() => {
+            onCheckoutSuccess(finalPrice, subId);
+        }, 800); // ดีเลย์นิดนึงให้ UI ไม่กระตุก
+      }
 
+      setCart([]);
       if (onRefresh) onRefresh();
 
     } catch (error: any) {
@@ -168,7 +208,6 @@ export default function StoreDrawer({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
         </svg>
         เพิ่มแพ็กเกจ
-
         {cart.length > 0 && (
           <span className="absolute -top-2 -right-2 bg-[#424242] text-[#D3F4DC] w-6 h-6 flex items-center justify-center rounded-full text-xs font-black shadow-sm animate-bounce">
             {cart.length}
@@ -198,6 +237,26 @@ export default function StoreDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F8F9FA]">
+          
+          <div className="flex bg-gray-100 p-1.5 rounded-xl shadow-inner mb-2">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                billingCycle === 'monthly' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              รายเดือน
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                billingCycle === 'yearly' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              รายปี
+            </button>
+          </div>
+
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-full space-y-3">
               <div className="w-8 h-8 border-4 border-[#AED9E0] border-t-[#424242] rounded-full animate-spin"></div>
@@ -225,8 +284,10 @@ export default function StoreDrawer({
               const containerStyle = useDatabaseColor ? { backgroundColor: product.bg_color } : {};
               const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
 
-              // สร้างลอจิกเช็กสินค้าใกล้หมด
               const isLowStock = product.availableSlots <= 2;
+              
+              const currentPrice = getDisplayPrice(product);
+              const discountPercent = calculateDiscountPercent(product.price, product.yearly_price);
 
               return (
                 <div
@@ -256,7 +317,6 @@ export default function StoreDrawer({
                           {product.category || 'PREMIUM'}
                         </span>
                         
-                        {/* ป้ายแสดงจำนวนที่ว่างแบบใหม่ (FOMO) */}
                         <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm border ${
                           isLowStock 
                             ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white border-red-600 animate-pulse' 
@@ -280,7 +340,18 @@ export default function StoreDrawer({
                         </span>
                       </div>
                       <h3 className="font-bold text-gray-800 text-base leading-tight line-clamp-1">{product.name}</h3>
-                      <p className="text-gray-500 font-semibold text-sm mt-0.5">฿{product.price} <span className="text-xs font-normal">/ เดือน</span></p>
+                      
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-gray-500 font-semibold text-sm">
+                          ฿{currentPrice.toLocaleString()} <span className="text-xs font-normal">/ {billingCycle === 'yearly' ? 'ปี' : 'เดือน'}</span>
+                        </p>
+                        {billingCycle === 'yearly' && discountPercent > 0 && (
+                          <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">
+                            ประหยัด {discountPercent}%
+                          </span>
+                        )}
+                      </div>
+
                     </div>
                   </div>
                   <button
@@ -307,10 +378,10 @@ export default function StoreDrawer({
           <div className="flex justify-between items-end mb-5">
             <div>
               <span className="font-bold text-gray-400 text-sm uppercase tracking-wider">ยอดรวมสุทธิ</span>
-              <p className="text-xs text-gray-500 font-medium">{cart.length} รายการ</p>
+              <p className="text-xs text-gray-500 font-medium">1 รายการ ({billingCycle === 'yearly' ? 'รายปี' : 'รายเดือน'})</p>
             </div>
             <span className="text-3xl font-black text-gray-800">
-              ฿{cart.reduce((sum, item) => sum + item.price, 0)}
+              ฿{cart.length > 0 ? getDisplayPrice(cart[0]).toLocaleString() : 0}
             </span>
           </div>
           <button
@@ -328,7 +399,7 @@ export default function StoreDrawer({
                 กำลังดำเนินการ...
               </>
             ) : (
-              'ลงทะเบียนแพ็กเกจ'
+              'ยืนยันแพ็กเกจนี้'
             )}
           </button>
         </div>

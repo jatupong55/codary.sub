@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { calculateDaysLeft } from '@/utils/dashboardUtils'; // ดึงฟังก์ชันคำนวณวันมาใช้ ถ้าไม่มีให้เขียน logic วันที่เอาเองได้ครับ
+// สมมติว่ามีฟังก์ชันนี้ ถ้าไม่มี สามารถลบออกแล้วใช้ getDaysDiff ด้านล่างแทนได้ครับ
+import { calculateDaysLeft } from '@/utils/dashboardUtils'; 
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -132,9 +133,21 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-10">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-800 tracking-tight">ภาพรวมระบบ</h1>
-        <p className="text-gray-500 mt-2">สรุปข้อมูลการดำเนินงาน และสิ่งที่ต้องจัดการวันนี้</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 tracking-tight flex items-center gap-3">
+            ภาพรวมระบบ
+            {/* [NEW] นำ Total Users ที่ดึงข้อมูลมาแล้ว มาโชว์เป็น Badge น่ารักๆ */}
+            <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full border border-blue-200">
+              สมาชิกรวม {stats.totalUsers} คน
+            </span>
+          </h1>
+          <p className="text-gray-500 mt-2">สรุปข้อมูลการดำเนินงาน และสิ่งที่ต้องจัดการวันนี้</p>
+        </div>
+        <div className="text-right">
+            <p className="text-sm font-semibold text-gray-600">ข้อมูล ณ เดือนปัจจุบัน</p>
+            <p className="text-xs text-gray-400">{new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}</p>
+        </div>
       </div>
 
       {/* === Summary Cards (ปรับเป็น 4 คอลัมน์) === */}
@@ -200,11 +213,13 @@ export default function AdminDashboardPage() {
           <div className="flex justify-between items-start relative z-10">
             <div>
               <h3 className="text-gray-800 font-bold mb-1 opacity-80">รายได้เดือนปัจจุบัน</h3>
-              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm">
-                <span className="text-xl mr-1 opacity-80">฿</span>{stats.totalRevenue.toLocaleString()}
+              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm truncate">
+                <span className="text-xl mr-1 opacity-80">฿</span>
+                {/* [UPDATE] Format ตัวเลขให้มีลูกน้ำและทศนิยม 2 ตำแหน่ง */}
+                {stats.totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="p-2.5 bg-white/40 backdrop-blur-md rounded-xl text-pink-800 shadow-sm border border-white/50">
+            <div className="p-2.5 bg-white/40 backdrop-blur-md rounded-xl text-pink-800 shadow-sm border border-white/50 shrink-0">
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </div>
           </div>
@@ -223,7 +238,7 @@ export default function AdminDashboardPage() {
               </span>
               สลิปรอตรวจสอบด่วน
             </h2>
-            <Link href="/admin/customers" className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition">ไปหน้าจัดการ</Link>
+            <Link href="/admin/payments" className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition">ไปหน้าตรวจสอบสลิป</Link>
           </div>
           
           <div className="flex-1 overflow-y-auto">
@@ -241,7 +256,10 @@ export default function AdminDashboardPage() {
                       <p className="text-[11px] text-gray-500">{payment.subscriptions?.products?.name}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-orange-600">฿{payment.amount}</p>
+                      {/* [UPDATE] Format เงิน */}
+                      <p className="text-sm font-bold text-orange-600">
+                        ฿{Number(payment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
                       <p className="text-[10px] text-gray-400">{new Date(payment.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
                     </div>
                   </li>
@@ -280,10 +298,13 @@ export default function AdminDashboardPage() {
                         <p className="text-[11px] text-gray-500">{sub.products?.name}</p>
                       </div>
                       <div className="text-right">
-                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${dLeft === 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                          {dLeft === 0 ? 'หมดอายุวันนี้' : `เหลือ ${dLeft} วัน`}
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${dLeft <= 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                          {dLeft <= 0 ? 'หมดอายุวันนี้' : `เหลือ ${dLeft} วัน`}
                         </span>
-                        <p className="text-[10px] text-gray-400 mt-1">{new Date(sub.end_date).toLocaleDateString('th-TH')}</p>
+                        {/* [UPDATE] แสดงวันที่สไตล์ไทย */}
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {new Date(sub.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
                       </div>
                     </li>
                   )
@@ -295,7 +316,7 @@ export default function AdminDashboardPage() {
 
       </div>
 
-      {/* === Recent Payments (ตารางเดิม) === */}
+      {/* === Recent Payments === */}
       <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-gray-800">ประวัติชำระเงินล่าสุด</h2>
@@ -320,7 +341,12 @@ export default function AdminDashboardPage() {
                 <tr key={payment.id} className="border-b border-gray-100/50 last:border-0 hover:bg-white/40 transition-colors">
                   <td className="py-4 text-gray-800 font-medium">{payment?.users?.display_name || 'ไม่ระบุชื่อ'}</td>
                   <td className="py-4 text-gray-600">{payment?.subscriptions?.products?.name || 'N/A'}</td>
-                  <td className="py-4 text-gray-800">฿{payment?.amount?.toLocaleString()}</td>
+                  
+                  {/* [UPDATE] Format เงินให้มีลูกน้ำและทศนิยม */}
+                  <td className="py-4 text-green-600 font-semibold">
+                    ฿{Number(payment?.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  
                   <td className="py-4">
                     <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
                       payment.status === 'สำเร็จ' ? 'bg-[#CCF0D4] text-green-800' :
@@ -331,7 +357,8 @@ export default function AdminDashboardPage() {
                     </span>
                   </td>
                   <td className="py-4 text-gray-500">
-                    {new Date(payment.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                    {/* [UPDATE] Format วันที่ให้ดูเป็นไทยมากขึ้น */}
+                    {new Date(payment.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </td>
                 </tr>
               ))}
