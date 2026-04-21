@@ -50,7 +50,7 @@ export default function AdminInventoryPage() {
         password: '',
         max_slots: 6,
         cost: 0,
-        billing_cycle: 'monthly',
+        billing_cycle: '',
         status: 'active',
         next_renewal_date: '' // ใช้ string ปกติได้เลย Library จัดการให้
     });
@@ -78,10 +78,10 @@ export default function AdminInventoryPage() {
             const { data: accData, error: accError } = await supabase
                 .from('master_accounts')
                 .select(`
-          id, email, password, max_slots, status, details, next_renewal_date, cost,
-          products!master_accounts_product_id_fkey ( id, name, category ),
-          subscriptions!subscriptions_master_account_id_fkey ( id, status )
-        `)
+                  id, email, password, max_slots, status, details, next_renewal_date, cost, billing_cycle, 
+                  products!master_accounts_product_id_fkey ( id, name, category ),
+                  subscriptions!subscriptions_master_account_id_fkey ( id, status )
+                `)
                 .order('created_at', { ascending: false });
 
             if (accError) throw accError;
@@ -384,8 +384,6 @@ export default function AdminInventoryPage() {
                                         placeholder="เช่น 180.00"
                                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all" />
                                 </div>
-
-                                {/* ✅ เพิ่มตรงนี้ */}
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">รอบบิลของบ้าน</label>
                                     <select

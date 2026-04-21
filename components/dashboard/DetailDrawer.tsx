@@ -75,11 +75,20 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
   // เช็กว่าใช่ Spotify ไหม เพื่อโชว์ข้อมูลลิงก์เข้ากลุ่ม
   const isSpotify = product.category?.toLowerCase().trim() === 'spotify';
   
-  const nextDate = details.nextBillingDate ? new Date(details.nextBillingDate).toLocaleDateString('th-TH', { 
-    year: 'numeric', month: 'long', day: 'numeric' 
-  }) : '-';
+  // ใช้ end_date เป็น "วันต่ออายุถัดไป"
+  const nextDate = activeSub.end_date
+    ? new Date(activeSub.end_date).toLocaleDateString('th-TH', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    })
+    : '-';
 
-  const basePrice = details.retailPrice || product.price;
+  // ราคาที่ถูกต้อง: ดึงจาก expectedPrice ที่บันทึกตอนสั่งซื้อ
+  // ถ้าไม่มีค่อย fallback ตาม billing_cycle
+  const basePrice = details.expectedPrice || (
+    activeSub.billing_cycle === 'yearly'
+      ? (product.yearly_price || product.price * 12)
+      : product.price
+  );
   const stackedPayment = calculateStackedPayment(activeSub.end_date, basePrice, product.category);
 
   // จัดการการแสดงผล Logo และสีพื้นหลัง
@@ -139,7 +148,9 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                   {product.category || 'PREMIUM'}
                 </span>
                 <h2 className="text-3xl font-black text-[#2D2D2D] leading-tight">{product.name}</h2>
-                <p className="text-sm font-medium text-gray-400 mt-1">แพ็กเกจ{details.billingCycle || 'รายเดือน'}</p>
+                <p className="text-sm font-medium text-gray-400 mt-1">
+                  แพ็กเกจ{activeSub.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                </p>
               </div>
             </div>
             <button onClick={onClose} className="p-2.5 bg-gray-50 text-gray-400 hover:text-gray-900 rounded-full transition-colors z-10 shrink-0">✕</button>
@@ -181,15 +192,18 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                   </>
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                    <div className="flex justify-between items-center pb-4"
+                      style={{ borderBottom: details.note ? '1px solid #f3f4f6' : 'none' }}>
                       <span className="text-sm font-medium text-gray-500">สถานะสมาชิก</span>
-                      <span className="text-sm font-bold text-[#2D2D2D]">พร้อมใช้งานแล้ว</span>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#CCF0D4] text-green-800">
+                        พร้อมใช้งาน
+                      </span>
                     </div>
-                    <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
-                      <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                        {details.note || 'บัญชีของท่านได้รับการผูก License เรียบร้อยแล้ว สามารถเข้าใช้งานได้ทันที'}
-                      </p>
-                    </div>
+                    {details.note && (
+                      <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
+                        <p className="text-xs text-blue-700 font-medium leading-relaxed">{details.note}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -252,6 +266,12 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                           <p className="text-[11px] text-gray-400">
                             {new Date(payment.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} • {payment.method || 'Thai QR'}
                           </p>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${activeSub.billing_cycle === 'yearly'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                            }`}>
+                            {activeSub.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
