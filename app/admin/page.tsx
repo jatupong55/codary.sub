@@ -5,8 +5,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-// สมมติว่ามีฟังก์ชันนี้ ถ้าไม่มี สามารถลบออกแล้วใช้ getDaysDiff ด้านล่างแทนได้ครับ
-import { calculateDaysLeft } from '@/utils/dashboardUtils'; 
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -15,6 +13,8 @@ export default function AdminDashboardPage() {
     totalUsers: 0,
     activeSubs: 0,
     totalRevenue: 0,
+    totalCost: 0,
+    netProfit: 0,
     pendingCount: 0,
     availableSlots: 0,
     recentPayments: [] as any[],
@@ -84,13 +84,14 @@ export default function AdminDashboardPage() {
           .order('end_date', { ascending: true }),
 
         // คำนวณโควตาบ้าน (เอาโควตารวม - คนที่มีบ้านแล้ว)
-        supabase.from('master_accounts').select('max_slots').eq('status', 'active'),
+        supabase.from('master_accounts').select('max_slots, cost').eq('status', 'active'),
         supabase.from('subscriptions').select('*', { count: 'exact', head: true }).not('master_account_id', 'is', null).eq('status', 'active')
       ]);
 
       const totalRevenue = monthlyRevenue?.reduce((sum, payment) => sum + (payment?.amount || 0), 0) || 0;
       
-      // คำนวณโควตาที่ว่าง
+      const totalCost = masterAccounts?.reduce((sum, acc) => sum + (acc?.cost || 0), 0) || 0;
+      const netProfit = totalRevenue - totalCost;
       const totalMaxSlots = masterAccounts?.reduce((sum, account) => sum + (account?.max_slots || 0), 0) || 0;
       const availableSlots = Math.max(0, totalMaxSlots - (filledSlots || 0));
 
@@ -98,6 +99,8 @@ export default function AdminDashboardPage() {
         totalUsers: totalUsers || 0,
         activeSubs: activeSubs || 0,
         totalRevenue,
+        totalCost, 
+        netProfit, 
         pendingCount: pendingPaymentsData?.length || 0,
         availableSlots,
         recentPayments: recentPayments || [],
@@ -224,6 +227,41 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* === Financial Summary Bar === */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        {/* รายได้ */}
+        <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm p-5">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">รายรับเดือนนี้</p>
+          <p className="text-2xl font-black text-gray-800">
+            ฿{stats.totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">จากสลิปที่อนุมัติแล้ว</p>
+        </div>
+
+        {/* ต้นทุน */}
+        <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm p-5">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">ต้นทุนรวม (บ้านทั้งหมด)</p>
+          <p className="text-2xl font-black text-red-500">
+            ฿{stats.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">cost รวมทุก master account</p>
+        </div>
+
+        {/* กำไรสุทธิ */}
+        <div className={`backdrop-blur-lg border rounded-2xl shadow-sm p-5 ${stats.netProfit >= 0
+            ? 'bg-gradient-to-br from-[#8FE3A9]/30 to-[#CCF0D4]/30 border-green-200'
+            : 'bg-gradient-to-br from-red-100/50 to-red-50/50 border-red-200'
+          }`}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">กำไรสุทธิเดือนนี้</p>
+          <p className={`text-2xl font-black ${stats.netProfit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+            {stats.netProfit < 0 ? '-' : ''}฿{Math.abs(stats.netProfit).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">รายรับ − ต้นทุน</p>
+        </div>
+
       </div>
 
       {/* === ส่วนแจ้งเตือนด่วน (Needs Attention) 2 คอลัมน์ === */}

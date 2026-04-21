@@ -25,11 +25,13 @@ interface MasterAccount {
     email: string;
     password?: string;
     max_slots: number;
+    cost: number;
+    billing_cycle: 'monthly' | 'yearly';
     status: string;
-    next_renewal_date?: string; 
+    next_renewal_date?: string;
     products?: Product;
     subscriptions?: Subscription[];
-    details?: any; 
+    details?: any;
 }
 
 export default function AdminInventoryPage() {
@@ -47,6 +49,8 @@ export default function AdminInventoryPage() {
         email: '',
         password: '',
         max_slots: 6,
+        cost: 0,
+        billing_cycle: 'monthly',
         status: 'active',
         next_renewal_date: '' // ใช้ string ปกติได้เลย Library จัดการให้
     });
@@ -74,7 +78,7 @@ export default function AdminInventoryPage() {
             const { data: accData, error: accError } = await supabase
                 .from('master_accounts')
                 .select(`
-          id, email, password, max_slots, status, details, next_renewal_date, 
+          id, email, password, max_slots, status, details, next_renewal_date, cost,
           products!master_accounts_product_id_fkey ( id, name, category ),
           subscriptions!subscriptions_master_account_id_fkey ( id, status )
         `)
@@ -98,6 +102,8 @@ export default function AdminInventoryPage() {
                 email: account.email,
                 password: account.password || '',
                 max_slots: account.max_slots,
+                cost: account.cost ?? 0,
+                billing_cycle: account.billing_cycle || 'monthly',
                 status: account.status,
                 next_renewal_date: account.next_renewal_date ? account.next_renewal_date.split('T')[0] : ''
             });
@@ -113,12 +119,14 @@ export default function AdminInventoryPage() {
                 email: '',
                 password: '',
                 max_slots: 6,
+                cost: 0,
+                billing_cycle: 'monthly',
                 status: 'active',
                 next_renewal_date: ''
             });
             setEditDetails({ address: '', inviteLink: '', note: '' });
         }
-        
+
         setIsModalOpen(true);
         setTimeout(() => setIsAnimating(true), 50);
     };
@@ -137,6 +145,8 @@ export default function AdminInventoryPage() {
             email: formData.email,
             password: formData.password,
             max_slots: formData.max_slots,
+            cost: formData.cost,
+            billing_cycle: formData.billing_cycle,
             status: formData.status,
             next_renewal_date: formData.next_renewal_date || null,
             details: editDetails
@@ -151,7 +161,7 @@ export default function AdminInventoryPage() {
                 if (error) throw error;
             }
 
-            handleCloseModal(); 
+            handleCloseModal();
             Swal.fire({
                 icon: 'success',
                 title: 'บันทึกสำเร็จ',
@@ -224,7 +234,7 @@ export default function AdminInventoryPage() {
                                 <th className="px-6 py-4 font-medium">บัญชีบ้าน (Email)</th>
                                 <th className="px-6 py-4 font-medium">แพ็กเกจ (Product)</th>
                                 <th className="px-6 py-4 font-medium min-w-[200px]">โควตาที่ใช้ไป (Slots)</th>
-                                <th className="px-6 py-4 font-medium">วันต่ออายุบ้าน</th> 
+                                <th className="px-6 py-4 font-medium">วันต่ออายุบ้าน</th>
                                 <th className="px-6 py-4 font-medium text-right">จัดการ</th>
                             </tr>
                         </thead>
@@ -247,6 +257,12 @@ export default function AdminInventoryPage() {
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200">
                                                 {acc.products?.name || 'N/A'}
                                             </span>
+                                            <span className={`ml-1.5 inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${acc.billing_cycle === 'yearly'
+                                                    ? 'bg-purple-100 text-purple-700'
+                                                    : 'bg-blue-100 text-blue-700'
+                                                }`}>
+                                                {acc.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 min-w-[200px]">
                                             <div className="flex items-center justify-between text-xs mb-1 gap-4 whitespace-nowrap">
@@ -259,7 +275,7 @@ export default function AdminInventoryPage() {
                                                 <div className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${percentFull}%` }}></div>
                                             </div>
                                         </td>
-                                        
+
                                         {/* [UPDATE] แสดงผลในตารางแบบ วัน/เดือน/ปี (DD/MM/YYYY) */}
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {acc.next_renewal_date ? (
@@ -360,6 +376,29 @@ export default function AdminInventoryPage() {
                                 </div>
                             </div>
 
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">ต้นทุน/รอบ (บาท)</label>
+                                    <input type="number" min="0" step="0.01" value={formData.cost}
+                                        onChange={(e) => setFormData({ ...formData, cost: parseFloat(e.target.value) || 0 })}
+                                        placeholder="เช่น 180.00"
+                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all" />
+                                </div>
+
+                                {/* ✅ เพิ่มตรงนี้ */}
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">รอบบิลของบ้าน</label>
+                                    <select
+                                        value={formData.billing_cycle}
+                                        onChange={(e) => setFormData({ ...formData, billing_cycle: e.target.value })}
+                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors"
+                                    >
+                                        <option value="monthly">รายเดือน</option>
+                                        <option value="yearly">รายปี</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             {/* ส่วน Datepicker แบบ Modern ที่ส่งค่า YYYY-MM-DD เข้าฐานข้อมูลอัตโนมัติ */}
                             <div className="relative z-[100]">
                                 <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex justify-between">
@@ -369,12 +408,12 @@ export default function AdminInventoryPage() {
                                 <DatePicker
                                     // 1. อ่านค่าจาก String YYYY-MM-DD มาโชว์เป็นปฏิทิน
                                     selected={formData.next_renewal_date ? new Date(formData.next_renewal_date) : null}
-                                    
+
                                     // 2. เมื่อกดเลือกวัน ให้แปลงกลับเป็น YYYY-MM-DD ส่งเข้า Database
                                     onChange={(date: Date | null) => {
-                                        setFormData({ 
-                                            ...formData, 
-                                            next_renewal_date: date ? format(date, 'yyyy-MM-dd') : '' 
+                                        setFormData({
+                                            ...formData,
+                                            next_renewal_date: date ? format(date, 'yyyy-MM-dd') : ''
                                         });
                                     }}
                                     dateFormat="dd/MM/yyyy"
@@ -389,13 +428,13 @@ export default function AdminInventoryPage() {
 
                             <div className="pt-2 border-t border-gray-100 mt-4">
                                 <h4 className="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wider">ข้อมูลเพิ่มเติม (Details)</h4>
-                                
+
                                 {isSpotify ? (
                                     <div className="space-y-3">
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-600 mb-1">ที่อยู่ครอบครัว</label>
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 placeholder="กรอกที่อยู่สำหรับยืนยันตัวตน"
                                                 value={editDetails.address}
                                                 onChange={(e) => setEditDetails({ ...editDetails, address: e.target.value })}
@@ -404,8 +443,8 @@ export default function AdminInventoryPage() {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-600 mb-1">ลิงก์คำเชิญ (Invite Link)</label>
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 placeholder="https://www.spotify.com/th/family/join/..."
                                                 value={editDetails.inviteLink}
                                                 onChange={(e) => setEditDetails({ ...editDetails, inviteLink: e.target.value })}
@@ -416,7 +455,7 @@ export default function AdminInventoryPage() {
                                 ) : (
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">หมายเหตุถึงลูกค้า (Note)</label>
-                                        <textarea 
+                                        <textarea
                                             placeholder="คำแนะนำ หรือข้อมูลการเข้าสู่ระบบ..."
                                             value={editDetails.note}
                                             onChange={(e) => setEditDetails({ ...editDetails, note: e.target.value })}
