@@ -39,11 +39,11 @@ export default function AdminDashboardPage() {
     netProfit: 0,
     pendingCount: 0,
     availableSlots: 0,
-    recentPayments: [] as AdminPaymentRow[],
-    pendingPayments: [],
-    expiringSubs: [],
-    masterAccountsRaw: [],
-    monthlyRevenueRaw: []
+    recentPayments: [] as any[],
+    pendingPayments: [] as any[],
+    expiringSubs: [] as any[],
+    masterAccountsRaw: [] as any[],
+    monthlyRevenueRaw: [] as any[]
   });
 
   useEffect(() => {
