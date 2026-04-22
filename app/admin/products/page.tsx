@@ -89,11 +89,12 @@ export default function AdminProductsPage() {
       });
       
       fetchProducts();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
       Swal.fire({ 
         icon: 'error', 
         title: 'เปลี่ยนสถานะไม่สำเร็จ', 
-        text: error.message, 
+        text: message, 
         confirmButtonColor: '#ef4444',
         customClass: { popup: 'rounded-2xl' }
       });
@@ -159,9 +160,10 @@ export default function AdminProductsPage() {
       handleCloseModal();
       Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
       fetchProducts();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
       console.error('Save Product Error:', error);
-      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error.message, confirmButtonColor: '#ef4444' });
+      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message, confirmButtonColor: '#ef4444' });
     }
   };
 

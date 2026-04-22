@@ -59,11 +59,12 @@ export default function AdminVaultPage() {
         .order('id', { ascending: false });
 
       if (error && error.code !== '42P01') throw error;
-      setKeys((keyData as any) || []);
+      setKeys((keyData as unknown as VaultKey[]) || []);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
       console.error('Fetch Vault Error:', error);
-      Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: error.message });
+      Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: message });
     } finally {
       setIsLoading(false);
     }
@@ -110,8 +111,9 @@ export default function AdminVaultPage() {
       handleCloseModal();
       Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
       await fetchData();
-    } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message });
     } finally {
       setIsProcessing(false);
     }

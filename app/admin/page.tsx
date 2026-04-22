@@ -5,6 +5,28 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AdminSummaryCards from '@/components/admin/AdminSummaryCards';
+import ProfitAnalysis from '@/components/admin/ProfitAnalysis';
+import { calculateDaysLeft, formatCurrency } from '@/utils/subscriptionUtils';
+
+// Types สำหรับข้อมูลที่ดึงไว้ใน stats
+// หมายเหตุ: Supabase join คืน related rows เป็น array เสมอ
+interface AdminPaymentRow {
+  id: string;
+  amount: number;
+  status: string;
+  created_at: string;
+  users?: { display_name?: string | null; email?: string | null }[] | null;
+  subscriptions?: { products?: { name?: string | null }[] | null }[] | null;
+}
+
+interface AdminExpiringSubRow {
+  id: string;
+  end_date: string;
+  status: string;
+  users?: { display_name?: string | null; email?: string | null }[] | null;
+  products?: { name?: string | null }[] | null;
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -17,9 +39,11 @@ export default function AdminDashboardPage() {
     netProfit: 0,
     pendingCount: 0,
     availableSlots: 0,
-    recentPayments: [] as any[],
-    pendingPayments: [] as any[],
-    expiringSubs: [] as any[]
+    recentPayments: [] as AdminPaymentRow[],
+    pendingPayments: [],
+    expiringSubs: [],
+    masterAccountsRaw: [],
+    monthlyRevenueRaw: []
   });
 
   useEffect(() => {
@@ -61,7 +85,7 @@ export default function AdminDashboardPage() {
       ] = await Promise.all([
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'user'),
         supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('payments').select('amount').eq('status', 'สำเร็จ').gte('created_at', startOfMonth),
+        supabase.from('payments').select('amount, subscriptions(products(name, category))').eq('status', 'สำเร็จ').gte('created_at', startOfMonth),
         
         // ชำระเงินล่าสุด
         supabase.from('payments')
@@ -84,7 +108,7 @@ export default function AdminDashboardPage() {
           .order('end_date', { ascending: true }),
 
         // คำนวณโควตาบ้าน (เอาโควตารวม - คนที่มีบ้านแล้ว)
-        supabase.from('master_accounts').select('max_slots, cost').eq('status', 'active'),
+        supabase.from('master_accounts').select('max_slots, cost, products(name, category)').eq('status', 'active'),
         supabase.from('subscriptions').select('*', { count: 'exact', head: true }).not('master_account_id', 'is', null).eq('status', 'active')
       ]);
 
@@ -105,7 +129,9 @@ export default function AdminDashboardPage() {
         availableSlots,
         recentPayments: recentPayments || [],
         pendingPayments: pendingPaymentsData || [],
-        expiringSubs: expiringSubsData || []
+        expiringSubs: expiringSubsData || [],
+        masterAccountsRaw: masterAccounts || [],
+        monthlyRevenueRaw: monthlyRevenue || []
       });
 
       setIsLoading(false);
@@ -114,14 +140,7 @@ export default function AdminDashboardPage() {
     checkAuthAndFetchData();
   }, [router]);
 
-  // ฟังก์ชันหาจำนวนวัน
-  const getDaysDiff = (endDateStr: string) => {
-    const end = new Date(endDateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-    return Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  };
+
 
   if (isLoading) {
     return (
@@ -153,116 +172,11 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* === Summary Cards (ปรับเป็น 4 คอลัมน์) === */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Card 1: รอตรวจสอบสลิป (สำคัญสุด ไว้ซ้ายสุด) */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-orange-400 to-red-400 border border-orange-300 shadow-lg shadow-orange-200/50 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 text-white">
-          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-colors" />
-          <div className="flex justify-between items-start relative z-10">
-            <div>
-              <h3 className="font-bold mb-1 opacity-90 flex items-center gap-1.5">
-                <span className="relative flex h-3 w-3">
-                  {stats.pendingCount > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>}
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                </span>
-                รอตรวจสอบสลิป
-              </h3>
-              <p className="text-4xl font-black mt-1 drop-shadow-sm">
-                {stats.pendingCount} <span className="text-lg font-bold opacity-80">รายการ</span>
-              </p>
-            </div>
-            <div className="p-2.5 bg-white/20 backdrop-blur-md rounded-xl text-white shadow-sm border border-white/30">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-            </div>
-          </div>
-        </div>
+      {/* === Summary Cards & Financial Summary === */}
+      <AdminSummaryCards stats={stats} />
 
-        {/* Card 2: แพ็กเกจที่ใช้งานอยู่ */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-[#8FE3A9] to-[#CCF0D4] border border-[#8FE3A9]/50 shadow-lg shadow-[#CCF0D4]/40 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/30 rounded-full blur-2xl group-hover:bg-white/40 transition-colors" />
-          <div className="flex justify-between items-start relative z-10">
-            <div>
-              <h3 className="text-gray-800 font-bold mb-1 opacity-80">แพ็กเกจใช้งาน (Active)</h3>
-              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm">
-                {stats.activeSubs} <span className="text-lg font-bold opacity-70">รายการ</span>
-              </p>
-            </div>
-            <div className="p-2.5 bg-white/40 backdrop-blur-md rounded-xl text-green-800 shadow-sm border border-white/50">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: โควตาบ้านว่าง */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-300 to-cyan-200 border border-blue-300/50 shadow-lg shadow-blue-200/40 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/30 rounded-full blur-2xl group-hover:bg-white/40 transition-colors" />
-          <div className="flex justify-between items-start relative z-10">
-            <div>
-              <h3 className="text-gray-800 font-bold mb-1 opacity-80">โควตาบ้านที่ยังว่าง</h3>
-              <p className="text-4xl font-black text-blue-900 mt-1 drop-shadow-sm">
-                {stats.availableSlots} <span className="text-lg font-bold opacity-70">ที่นั่ง</span>
-              </p>
-            </div>
-            <div className="p-2.5 bg-white/40 backdrop-blur-md rounded-xl text-blue-800 shadow-sm border border-white/50">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: รายได้เดือนปัจจุบัน */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-[#E6A1C3] to-[#F3CFE0] border border-[#E6A1C3]/50 shadow-lg shadow-[#F3CFE0]/40 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-          <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/30 rounded-full blur-2xl group-hover:bg-white/40 transition-colors" />
-          <div className="flex justify-between items-start relative z-10">
-            <div>
-              <h3 className="text-gray-800 font-bold mb-1 opacity-80">รายได้เดือนปัจจุบัน</h3>
-              <p className="text-4xl font-black text-gray-900 mt-1 drop-shadow-sm truncate">
-                <span className="text-xl mr-1 opacity-80">฿</span>
-                {/* [UPDATE] Format ตัวเลขให้มีลูกน้ำและทศนิยม 2 ตำแหน่ง */}
-                {stats.totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div className="p-2.5 bg-white/40 backdrop-blur-md rounded-xl text-pink-800 shadow-sm border border-white/50 shrink-0">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* === Financial Summary Bar === */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-        {/* รายได้ */}
-        <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm p-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">รายรับเดือนนี้</p>
-          <p className="text-2xl font-black text-gray-800">
-            ฿{stats.totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">จากสลิปที่อนุมัติแล้ว</p>
-        </div>
-
-        {/* ต้นทุน */}
-        <div className="bg-white/70 backdrop-blur-lg border border-white/50 rounded-2xl shadow-sm p-5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">ต้นทุนรวม (บ้านทั้งหมด)</p>
-          <p className="text-2xl font-black text-red-500">
-            ฿{stats.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">cost รวมทุก master account</p>
-        </div>
-
-        {/* กำไรสุทธิ */}
-        <div className={`backdrop-blur-lg border rounded-2xl shadow-sm p-5 ${stats.netProfit >= 0
-            ? 'bg-gradient-to-br from-[#8FE3A9]/30 to-[#CCF0D4]/30 border-green-200'
-            : 'bg-gradient-to-br from-red-100/50 to-red-50/50 border-red-200'
-          }`}>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">กำไรสุทธิเดือนนี้</p>
-          <p className={`text-2xl font-black ${stats.netProfit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-            {stats.netProfit < 0 ? '-' : ''}฿{Math.abs(stats.netProfit).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">รายรับ − ต้นทุน</p>
-        </div>
-
-      </div>
+      {/* === Profit Analysis Table === */}
+      <ProfitAnalysis payments={stats.monthlyRevenueRaw} masterAccounts={stats.masterAccountsRaw} />
 
       {/* === ส่วนแจ้งเตือนด่วน (Needs Attention) 2 คอลัมน์ === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -290,13 +204,13 @@ export default function AdminDashboardPage() {
                 {stats.pendingPayments.map(payment => (
                   <li key={payment.id} className="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div>
-                      <p className="text-sm font-bold text-gray-800">{payment.users?.display_name}</p>
-                      <p className="text-[11px] text-gray-500">{payment.subscriptions?.products?.name}</p>
+                      <p className="text-sm font-bold text-gray-800">{payment.users?.[0]?.display_name}</p>
+                      <p className="text-[11px] text-gray-500">{payment.subscriptions?.[0]?.products?.[0]?.name}</p>
                     </div>
                     <div className="text-right">
                       {/* [UPDATE] Format เงิน */}
                       <p className="text-sm font-bold text-orange-600">
-                        ฿{Number(payment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ฿{formatCurrency(Number(payment.amount))}
                       </p>
                       <p className="text-[10px] text-gray-400">{new Date(payment.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
                     </div>
@@ -328,12 +242,12 @@ export default function AdminDashboardPage() {
             ) : (
               <ul className="space-y-3">
                 {stats.expiringSubs.map(sub => {
-                  const dLeft = getDaysDiff(sub.end_date);
+                  const dLeft = calculateDaysLeft(sub.end_date);
                   return (
                     <li key={sub.id} className="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                       <div>
-                        <p className="text-sm font-bold text-gray-800">{sub.users?.display_name}</p>
-                        <p className="text-[11px] text-gray-500">{sub.products?.name}</p>
+                        <p className="text-sm font-bold text-gray-800">{sub.users?.[0]?.display_name}</p>
+                        <p className="text-[11px] text-gray-500">{sub.products?.[0]?.name}</p>
                       </div>
                       <div className="text-right">
                         <span className={`px-2 py-1 rounded text-[10px] font-bold ${dLeft <= 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
@@ -377,12 +291,23 @@ export default function AdminDashboardPage() {
             <tbody className="text-sm">
               {stats.recentPayments.map((payment) => (
                 <tr key={payment.id} className="border-b border-gray-100/50 last:border-0 hover:bg-white/40 transition-colors">
-                  <td className="py-4 text-gray-800 font-medium">{payment?.users?.display_name || 'ไม่ระบุชื่อ'}</td>
-                  <td className="py-4 text-gray-600">{payment?.subscriptions?.products?.name || 'N/A'}</td>
+                  <td className="py-4 text-gray-800 font-medium">
+                    {(() => {
+                      const user = Array.isArray(payment?.users) ? payment?.users[0] : payment?.users;
+                      return user?.display_name || user?.email || 'ไม่ระบุชื่อ';
+                    })()}
+                  </td>
+                  <td className="py-4 text-gray-600">
+                    {(() => {
+                      const sub = Array.isArray(payment?.subscriptions) ? payment?.subscriptions[0] : payment?.subscriptions;
+                      const product = Array.isArray(sub?.products) ? sub?.products[0] : sub?.products;
+                      return product?.name || 'N/A';
+                    })()}
+                  </td>
                   
                   {/* [UPDATE] Format เงินให้มีลูกน้ำและทศนิยม */}
                   <td className="py-4 text-green-600 font-semibold">
-                    ฿{Number(payment?.amount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ฿{formatCurrency(Number(payment?.amount || 0))}
                   </td>
                   
                   <td className="py-4">

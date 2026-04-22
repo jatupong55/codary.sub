@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { ReminderEmail } from '@/components/emails/ReminderEmail';
+import { formatDate } from '@/utils/subscriptionUtils';
+import { sendLineUser } from '@/lib/lineNotify';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +16,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function GET(request: Request) {
   // --- Security Check ---
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+  
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && !isVercelCron) {
     return NextResponse.json({ error: 'Unauthorized: ระบุรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
   }
 
@@ -29,7 +33,7 @@ export async function GET(request: Request) {
       .from('subscriptions')
       .select(`
         id, end_date, user_id,
-        users ( email, display_name ),
+        users ( email, display_name, line_user_id ),
         products ( name, price )
       `)
       .eq('status', 'active')
@@ -42,28 +46,39 @@ export async function GET(request: Request) {
 
     if (expiringSubs && expiringSubs.length > 0) {
       for (const sub of expiringSubs) {
-        const user = sub.users as any;
-        const product = sub.products as any;
-        const userEmail = user.email;
-        const formattedDate = new Date(sub.end_date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+        const usersArr = sub.users as { email: string; display_name?: string | null }[] | null;
+        const productsArr = sub.products as { name: string; price: number }[] | null;
+        const user = usersArr?.[0];
+        const product = productsArr?.[0];
+        const userEmail = user?.email;
+        const formattedDate = formatDate(sub.end_date);
 
         try {
+          if (!userEmail || !product) throw new Error('Missing user or product data');
+
           await resend.emails.send({
             from: 'Codary Sub <onboarding@resend.dev>', 
             to: [userEmail], 
             subject: `แจ้งเตือนยอดชำระ: ${product.name}`,
             react: ReminderEmail({ 
-              userName: user.display_name, 
+              userName: user.display_name || user.email || 'ลูกค้า', 
               productName: product.name, 
               targetDateString: formattedDate, 
               price: product.price 
             }) as React.ReactElement,
           });
           
-          console.log(`✅ ยิง Email สำเร็จ -> ${userEmail}`);
+          // 2. ส่ง LINE (ถ้ามี Token)
+          const lineUserId = (user as any).line_user_id;
+          if (lineUserId) {
+            const lineMessage = `📢 แจ้งเตือนจาก Codary Sub!\n------------------\n🛍️ แพ็กเกจ: ${product.name}\n📅 จะหมดอายุในวันที่: ${formattedDate}\n💰 ยอดชำระ: ฿${product.price}\n------------------\nโปรดตรวจสอบข้อมูลในหน้า Dashboard เพื่อดำเนินการต่ออายุครับ 😊`;
+            await sendLineUser(lineUserId, lineMessage);
+            console.log(`✅ ส่ง LINE สำเร็จ -> ${userEmail}`);
+          }
+
           notificationsSent.push(userEmail);
         } catch (emailError) {
-          console.error(`❌ ยิง Email พลาด -> ${userEmail}:`, emailError);
+          console.error(`❌ แจ้งเตือนพลาด -> ${userEmail}:`, emailError);
         }
       }
 
@@ -80,7 +95,7 @@ export async function GET(request: Request) {
       message: 'Cronjob (Remind) ทำงานสำเร็จ!'
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Cron Remind Error:', error);
     return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดในระบบแจ้งเตือนอีเมล' }, { status: 500 });
   }

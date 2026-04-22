@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
+import type { UserProfile } from '@/types/dashboard';
 
 interface PaymentModalProps {
   isMounted: boolean;
@@ -13,7 +14,7 @@ interface PaymentModalProps {
   payAmount: number;
   qrPayload: string;
   selectedSubId: string | null;
-  userProfile: any;
+  userProfile: UserProfile;
   onSuccess: () => void;
 }
 
@@ -88,15 +89,15 @@ export default function PaymentModal({
         }
       }, 300);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'ไม่สามารถทำรายการได้ กรุณาลองใหม่อีกครั้ง';
       console.error('Payment flow error:', error);
       setIsVerifying(false);
 
-      // เปลี่ยน alert() ตรง Error ด้วย
       Swal.fire({
         icon: 'error',
         title: 'เกิดข้อผิดพลาด',
-        text: error.message || 'ไม่สามารถทำรายการได้ กรุณาลองใหม่อีกครั้ง',
+        text: message,
         confirmButtonColor: '#ef4444',
         customClass: {
           popup: 'rounded-2xl'

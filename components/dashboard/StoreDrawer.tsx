@@ -4,6 +4,25 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
 import { sendLineAdmin } from '@/lib/lineNotify';
+import type { DashboardSubscription } from '@/types/dashboard';
+
+// Type สำหรับ Product ที่ดึงจาก safe_master_accounts (มี availableSlots เพิ่มมา)
+interface StoreProduct {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  yearly_price?: number | null;
+  icon?: string | null;
+  bg_color?: string | null;
+  availableSlots: number;
+}
+
+// Type ย่อสำหรับ account.subscriptions ที่ join มา
+interface MasterAccountSub {
+  id: string;
+  status: string;
+}
 
 const getBrandStyle = (category: string) => {
   const safeCategory = category?.toLowerCase()?.trim() || '';
@@ -26,15 +45,15 @@ const getBrandStyle = (category: string) => {
 export default function StoreDrawer({
   onRefresh,
   subscriptions = [],
-  onCheckoutSuccess // [NEW] รับสัญญาณส่งต่อให้หน้า Payment
+  onCheckoutSuccess
 }: {
   onRefresh?: () => void;
-  subscriptions?: any[];
+  subscriptions?: DashboardSubscription[];
   onCheckoutSuccess?: (price: number, subId: string) => void;
 }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<StoreProduct[]>([]);
+  const [cart, setCart] = useState<StoreProduct[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -68,13 +87,13 @@ export default function StoreDrawer({
 
       const existingCategories = subscriptions
         .filter(sub => sub.status === 'active' || sub.status === 'pending')
-        .map(sub => sub.products?.category?.toLowerCase()?.trim());
+        .map(sub => sub.products?.[0]?.category?.toLowerCase()?.trim());
 
       const availableProductsMap = new Map();
 
-      accData.forEach((acc: any) => {
-        const occupiedSlots = acc.subscriptions?.filter(
-          (sub: any) => sub.status === 'active' || sub.status === 'pending'
+      accData.forEach((acc) => {
+        const occupiedSlots = (acc.subscriptions as MasterAccountSub[] | null)?.filter(
+          (sub) => sub.status === 'active' || sub.status === 'pending'
         ).length || 0;
 
         const freeSlots = acc.max_slots - occupiedSlots;
@@ -102,24 +121,24 @@ export default function StoreDrawer({
     }
   };
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: StoreProduct) => {
     // [UPDATE] บังคับตะกร้าให้มีของแค่ชิ้นเดียวเสมอ! (เลือกใหม่ไปทับของเก่าเลย)
     setCart([product]);
   };
 
-  const removeFromCart = (productId: number) => {
+  const removeFromCart = (productId: string) => {
     setCart(cart.filter(item => item.id !== productId));
   };
 
-  const getDisplayPrice = (product: any) => {
+  const getDisplayPrice = (product: StoreProduct) => {
     if (billingCycle === 'yearly') {
       return product.yearly_price || (product.price * 12); 
     }
     return product.price;
   };
 
-  const calculateDiscountPercent = (monthlyPrice: number, yearlyPrice: number) => {
-    if (!yearlyPrice) return 0;
+  const calculateDiscountPercent = (monthlyPrice: number, yearlyPrice: number | null | undefined) => {
+    if (!yearlyPrice || typeof yearlyPrice !== 'number') return 0;
     const fullPrice = monthlyPrice * 12;
     if (yearlyPrice >= fullPrice) return 0;
     const discount = ((fullPrice - yearlyPrice) / fullPrice) * 100;
@@ -189,11 +208,12 @@ export default function StoreDrawer({
       setCart([]);
       if (onRefresh) onRefresh();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
       Swal.fire({
         icon: 'error',
         title: 'เกิดข้อผิดพลาด',
-        text: error.message,
+        text: message,
         confirmButtonColor: '#ef4444',
         confirmButtonText: 'ลองใหม่',
         customClass: { popup: 'rounded-2xl' }
@@ -285,8 +305,8 @@ export default function StoreDrawer({
               const iconSource = product.icon || brandStyle.logo;
               const isUrl = iconSource?.startsWith('http') || iconSource?.startsWith('data:image');
 
-              const useDatabaseColor = product.bg_color && product.bg_color !== '#f3f4f6';
-              const containerStyle = useDatabaseColor ? { backgroundColor: product.bg_color } : {};
+              const useDatabaseColor = !!(product.bg_color && product.bg_color !== '#f3f4f6');
+              const containerStyle = useDatabaseColor ? { backgroundColor: product.bg_color as string } : {};
               const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
 
               const isLowStock = product.availableSlots <= 2;

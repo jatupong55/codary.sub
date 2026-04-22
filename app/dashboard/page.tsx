@@ -5,6 +5,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import generatePayload from 'promptpay-qr';
+import { isSubExpired } from '@/utils/subscriptionUtils';
+import type { DashboardSubscription, UserProfile } from '@/types/dashboard';
 
 // Import Components ที่เราแยกไว้
 import Header from '@/components/dashboard/Header';
@@ -14,12 +16,11 @@ import PaymentModal from '@/components/dashboard/PaymentModal';
 import StoreDrawer from '@/components/dashboard/StoreDrawer';
 
 export default function Dashboard() {
-  const [userProfile, setUserProfile] = useState<any>(null);
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [subscriptions, setSubscriptions] = useState<DashboardSubscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // State สำหรับจัดการ Tab (current = ปัจจุบัน, history = ประวัติ/ยกเลิก)
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
 
   const [isModalMounted, setIsModalMounted] = useState(false);
@@ -29,7 +30,7 @@ export default function Dashboard() {
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
   
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [activeDetailSub, setActiveDetailSub] = useState<any>(null);
+  const [activeDetailSub, setActiveDetailSub] = useState<DashboardSubscription | null>(null);
 
   const MY_PROMPTPAY_ID = "0873616215";
 
@@ -51,7 +52,7 @@ export default function Dashboard() {
           icon,
           bg_color
         ),
-        payments!payments_subscription_id_fkey ( id, status )
+        payments!payments_subscription_id_fkey ( id, status, amount, created_at )
       `)
       .eq('user_id', userId)
       .order('end_date', { ascending: true });
@@ -60,7 +61,7 @@ export default function Dashboard() {
     if (subsData) setSubscriptions(subsData);
   }, []);
 
-  const handleOpenDetail = (sub: any) => {
+  const handleOpenDetail = (sub: DashboardSubscription) => {
     setActiveDetailSub(sub);
     setIsDetailOpen(true);
   };
@@ -79,7 +80,7 @@ export default function Dashboard() {
 
       const { data: dbUser } = await supabase
         .from('users')
-        .select('*')
+        .select('*, line_user_id')
         .eq('id', session.user.id)
         .single();
 
@@ -92,10 +93,11 @@ export default function Dashboard() {
 
       setUserProfile({
         id: session.user.id,
-        email: session.user.email,
+        email: session.user.email || '',
         avatar_url: session.user.user_metadata?.avatar_url || fallbackAvatar,
         display_name: dbUser?.display_name || session.user.user_metadata?.name || 'User',
-        role: dbUser?.role || 'user'
+        role: dbUser?.role || 'user',
+        line_user_id: dbUser?.line_user_id
       });
 
       await fetchSubscriptions(session.user.id);
@@ -111,9 +113,9 @@ export default function Dashboard() {
   };
 
   // เปลี่ยนจากรับ basePrice เป็นรับ sub (ข้อมูลแพ็กเกจ) ทั้งก้อน
-  const handleOpenPayment = (sub: any) => {
+  const handleOpenPayment = (sub: DashboardSubscription) => {
     // 1. ตรวจสอบว่ามี expectedPrice ใน details ไหม ถ้าไม่มีให้กลับไปใช้ราคาตั้งต้นของ product
-    const basePrice = sub.details?.expectedPrice || sub.products?.price || 0;
+    const basePrice = sub.details?.expectedPrice || sub.products?.[0]?.price || 0;
     
     // 2. สุ่มเศษสตางค์ (ตามโค้ดเดิมของคุณลูกค้า)
     // const randomSatang = Math.floor(Math.random() * 99) + 1;
@@ -136,16 +138,7 @@ export default function Dashboard() {
   };
 
   // === ฟังก์ชันเช็กว่าหมดอายุแล้วหรือยัง (ให้ตรงกับ Logic ใน Card) ===
-  const isSubExpired = (sub: any) => {
-    const endDate = new Date(sub.end_date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    endDate.setHours(0, 0, 0, 0);
-    const diffTime = endDate.getTime() - today.getTime();
-    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    return sub.status === 'expired' || (daysLeft < 0 && sub.status !== 'pending' && sub.status !== 'cancelled');
-  };
+
 
   // === กรองข้อมูลแยกตาม Tab ===
   const currentSubs = subscriptions.filter(sub => sub.status !== 'cancelled' && !isSubExpired(sub));
@@ -153,7 +146,7 @@ export default function Dashboard() {
 
   const displaySubs = activeTab === 'current' ? currentSubs : historySubs;
 
-  if (isLoading) {
+  if (isLoading || !userProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-pulse flex flex-col items-center transition-opacity duration-500">
@@ -210,11 +203,15 @@ export default function Dashboard() {
                 
                 // [NEW] โค้ดรับสัญญาณ และสร้าง Mock Data หลอกระบบให้เปิด Modal โอนเงิน
                 onCheckoutSuccess={(price, subId) => {
-                  const mockSubData = { 
+                  const mockSubData: DashboardSubscription = { 
                     id: subId, 
+                    start_date: new Date().toISOString(),
+                    end_date: new Date().toISOString(),
+                    status: 'pending',
+                    billing_cycle: 'monthly',
                     details: { expectedPrice: price } 
                   };
-                  handleOpenPayment(mockSubData as any);
+                  handleOpenPayment(mockSubData);
                 }}
               />
             )}
@@ -243,12 +240,14 @@ export default function Dashboard() {
         </section>
       </div>
       
-      <DetailDrawer 
-        isOpen={isDetailOpen} 
-        onClose={handleCloseDetail} 
-        sub={activeDetailSub} 
-        userProfile={userProfile} 
-      />
+      {activeDetailSub && (
+        <DetailDrawer 
+          isOpen={isDetailOpen} 
+          onClose={handleCloseDetail} 
+          sub={activeDetailSub} 
+          userProfile={userProfile} 
+        />
+      )}
 
       <PaymentModal 
         isMounted={isModalMounted}

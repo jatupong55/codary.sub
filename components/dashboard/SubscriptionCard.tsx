@@ -1,13 +1,14 @@
 // src/components/dashboard/SubscriptionCard.tsx
 'use client';
 
-import { calculateStackedPayment, calculateDaysLeft, formatDate } from '@/utils/dashboardUtils';
+import { calculateStackedPayment, calculateDaysLeft, formatDate } from '@/utils/subscriptionUtils';
 import { supabase } from '@/lib/supabase';
+import type { DashboardSubscription, Payment } from '@/types/dashboard';
 
 interface SubscriptionCardProps {
-  sub: any;
-  onOpenDetail: (sub: any) => void;
-  onOpenPayment: (sub: any) => void;
+  sub: DashboardSubscription;
+  onOpenDetail: (sub: DashboardSubscription) => void;
+  onOpenPayment: (sub: DashboardSubscription) => void;
 }
 
 const getBrandStyle = (category: string) => {
@@ -31,7 +32,7 @@ const getBrandStyle = (category: string) => {
 export default function SubscriptionCard({ sub, onOpenDetail, onOpenPayment }: SubscriptionCardProps) {
   const daysLeft = calculateDaysLeft(sub.end_date);
   const isExpiringSoon = daysLeft <= 3 && daysLeft >= 0;
-  const product = sub.products || {};
+  const product = Array.isArray(sub.products) ? sub.products[0] : (sub.products || {} as any);
   const details = sub.details || {};
   const codaryPastelGradient = 'from-[#BCE2E8] via-[#F3CFE0] to-[#CCF0D4]';
 
@@ -43,24 +44,24 @@ export default function SubscriptionCard({ sub, onOpenDetail, onOpenPayment }: S
   const isExpired = sub.status === 'expired' || (daysLeft < 0 && sub.status !== 'pending' && !isCancelled);
   const isPendingSubscription = sub.status === 'pending';
   
-  // เช็กว่ามี Payment ที่สถานะ รอตรวจสอบ ไหม
-  const hasPendingPayment = sub.payments?.some((p: any) => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+  const pendingPayment = (sub.payments as Payment[] | null)?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+  const hasPendingPayment = !!pendingPayment;
   
   // เช็กว่ามี Payment ที่ถูกปฏิเสธไหม (และต้องไม่มีที่รอตรวจสอบอยู่ แปลว่าเพิ่งโดนปฏิเสธสดๆ ร้อนๆ)
-  const rejectedPayment = sub.payments?.sort((a: any, b: any) => b.id.localeCompare(a.id)).find((p: any) => p.status === 'ถูกปฏิเสธ' || p.status === 'rejected');
+  const rejectedPayment = (sub.payments as Payment[] | null)?.sort((a, b) => b.id.localeCompare(a.id)).find((p) => p.status === 'ถูกปฏิเสธ' || p.status === 'rejected');
   const isRejectedSlip = !!rejectedPayment && !hasPendingPayment;
   
   // ล็อคการ์ดถ้ายกเลิก, หมดอายุ, หรือรอดำเนินการ
   const isLocked = isPendingSubscription || hasPendingPayment || isCancelled || isExpired;
   const isTestMode = process.env.NEXT_PUBLIC_ENABLE_TEST_LOGIN === 'true';
-  const brandStyle = getBrandStyle(product.category);
+  const brandStyle = getBrandStyle(product?.category || '');
 
   // จัดการการแสดงผล Logo และสีพื้นหลัง
-  const iconSource = product.icon || brandStyle.logo;
+  const iconSource = product?.icon || brandStyle.logo;
   const isUrl = iconSource?.startsWith('http') || iconSource?.startsWith('data:image');
   
-  const useDatabaseColor = product.bg_color && product.bg_color !== '#f3f4f6';
-  const containerStyle = useDatabaseColor ? { backgroundColor: product.bg_color } : {};
+  const useDatabaseColor = product?.bg_color && product?.bg_color !== '#f3f4f6';
+  const containerStyle = useDatabaseColor ? { backgroundColor: product?.bg_color } : {};
   const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
 
   const handleForceExpire = async (e: React.MouseEvent) => {
@@ -97,20 +98,20 @@ export default function SubscriptionCard({ sub, onOpenDetail, onOpenPayment }: S
               style={containerStyle}
             >
               {isUrl ? (
-                <img src={iconSource} alt={product.category} className="w-6 h-6 object-contain drop-shadow-sm" />
+                <img src={iconSource} alt={product?.category} className="w-6 h-6 object-contain drop-shadow-sm" />
               ) : iconSource ? (
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconSource} />
                 </svg>
               ) : (
-                <span className="text-gray-400 font-black text-lg">{product.category?.substring(0, 2).toUpperCase()}</span>
+                <span className="text-gray-400 font-black text-lg">{product?.category?.substring(0, 2).toUpperCase()}</span>
               )}
             </div>
 
             <div>
-              <h4 className={`font-bold text-base transition-colors duration-300 ${isLocked ? 'text-gray-500' : 'text-[#2D2D2D]'}`}>
-                {product.name}
-              </h4>
+              <h3 className="text-xl font-bold text-gray-800 tracking-tight leading-tight group-hover:text-black transition-colors">
+                {product?.name || 'กำลังโหลด...'}
+              </h3>
               <p className="text-xs text-gray-400 font-medium mt-0.5">
                 {isCancelled 
                   ? 'แพ็กเกจถูกยกเลิกแล้ว' 

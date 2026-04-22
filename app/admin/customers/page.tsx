@@ -11,50 +11,30 @@ import "react-datepicker/dist/react-datepicker.css";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
 
-interface PaymentData {
-  id: string;
-  status: string;
-  slip_url: string;
-  amount: number;
-}
-
-interface SubscriptionData {
-  id: string;
-  end_date: string;
-  status: string;
-  billing_cycle: string;
-  master_account_id: string | null;
-  details?: any;
-  users: { display_name: string; email: string };
-  products: { id: string; name: string; category: string };
-  master_accounts?: { id: string; email: string };
-  payments?: PaymentData[];
-}
-
-interface MasterAccount {
-  id: string;
-  product_id: string;
-  email: string;
-  max_slots: number;
-}
+import { isSubExpired, formatDate, calculateDaysLeft } from '@/utils/subscriptionUtils';
+import type { 
+  AdminSubscription, 
+  AdminMasterAccount, 
+  GroupedAdminUser as GroupedUser
+} from '@/types/admin';
 
 export default function AdminCustomersPage() {
   const [isLoading, setIsLoading] = useState(true);
-  const [subscriptions, setSubscriptions] = useState<SubscriptionData[]>([]);
-  const [masterAccounts, setMasterAccounts] = useState<MasterAccount[]>([]);
+  const [subscriptions, setSubscriptions] = useState<AdminSubscription[]>([]);
+  const [masterAccounts, setMasterAccounts] = useState<AdminMasterAccount[]>([]);
 
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [showCancelledFor, setShowCancelledFor] = useState<Set<string>>(new Set());
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [selectedSub, setSelectedSub] = useState<SubscriptionData | null>(null);
+  const [selectedSub, setSelectedSub] = useState<AdminSubscription | null>(null);
 
   const [editEndDate, setEditEndDate] = useState('');
   const [editHouseId, setEditHouseId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const openEditModal = (sub: SubscriptionData) => {
+  const openEditModal = (sub: AdminSubscription) => {
     setSelectedSub(sub);
 
     let defaultEndDate = sub.end_date ? sub.end_date.split('T')[0] : '';
@@ -117,18 +97,19 @@ export default function AdminCustomersPage() {
 
       const { data: houseData, error: houseError } = await supabase
         .from('master_accounts')
-        .select('id, product_id, email, max_slots')
+        .select('id, product_id, email, max_slots, cost, billing_cycle, status')
         .eq('status', 'active');
 
       if (houseError && houseError.code !== '42P01') {
         console.error('House Error:', houseError);
       }
 
-      setSubscriptions((subData as any) || []);
+      setSubscriptions((subData as unknown as AdminSubscription[]) || []);
       setMasterAccounts(houseData || []);
 
-    } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: error.message, confirmButtonColor: '#111827' });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+      Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: message, confirmButtonColor: '#111827' });
     } finally {
       setIsLoading(false);
     }
@@ -163,8 +144,9 @@ export default function AdminCustomersPage() {
       handleCloseModal();
       Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: 'อนุมัติและอัปเดตข้อมูลลูกค้าเรียบร้อยแล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
       await fetchData();
-    } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error.message, confirmButtonColor: '#ef4444' });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message, confirmButtonColor: '#ef4444' });
     } finally {
       setIsProcessing(false);
     }
@@ -203,15 +185,16 @@ export default function AdminCustomersPage() {
         Swal.fire({ icon: 'success', title: 'ปฏิเสธสลิปแล้ว', text: 'ระบบได้แจ้งให้ลูกค้าทราบเพื่อโอนเงินใหม่แล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         handleCloseModal();
         await fetchData();
-      } catch (error: any) {
-        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.message, confirmButtonColor: '#ef4444' });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: message, confirmButtonColor: '#ef4444' });
       } finally {
         setIsProcessing(false);
       }
     }
   };
 
-  const handleCancelSubscription = async (sub: SubscriptionData) => {
+  const handleCancelSubscription = async (sub: AdminSubscription) => {
     const { value: cancelForm } = await Swal.fire({
       title: 'ยกเลิกแพ็กเกจ',
       html: `
@@ -261,12 +244,16 @@ export default function AdminCustomersPage() {
       const currentDetails = sub.details || {};
 
       try {
+        const prodName = Array.isArray(sub.products) ? sub.products[0]?.name : (sub.products as any)?.name;
+        const houseEmail = Array.isArray(sub.master_accounts) ? sub.master_accounts[0]?.email : (sub.master_accounts as any)?.email;
+        const userEmail = Array.isArray(sub.users) ? sub.users[0]?.email : (sub.users as any)?.email;
+
         if (mode === 'immediate') {
           const updatedDetails = { ...currentDetails, cancelReason: reason, cancelMode: 'immediate', cancelledAt: new Date().toISOString() };
           const { error } = await supabase.from('subscriptions').update({ status: 'cancelled', master_account_id: null, details: updatedDetails }).eq('id', sub.id);
           if (error) throw error;
 
-          const alertMessage = `🔴 [แจ้งเตือน] เตะลูกค้าออกจากระบบทันที!\n----------------------\n🛍️ แบรนด์: ${sub.products?.name}\n🏠 บ้าน: ${sub.master_accounts?.email || 'ยังไม่จัดบ้าน'}\n👤 ลูกค้า: ${sub.users?.email}\n📄 เหตุผล: ${reason}\n----------------------\n⚠️ แอดมินโปรดเข้าไปเตะอีเมลนี้ออกจาก Family ด่วน เพื่อคืนโควตา!`;
+          const alertMessage = `🔴 [แจ้งเตือน] เตะลูกค้าออกจากระบบทันที!\n----------------------\n🛍️ แบรนด์: ${prodName}\n🏠 บ้าน: ${houseEmail || 'ยังไม่จัดบ้าน'}\n👤 ลูกค้า: ${userEmail}\n📄 เหตุผล: ${reason}\n----------------------\n⚠️ แอดมินโปรดเข้าไปเตะอีเมลนี้ออกจาก Family ด่วน เพื่อคืนโควตา!`;
           await sendLineAdmin(alertMessage).catch(e => console.error(e));
           Swal.fire({ icon: 'success', title: 'ยกเลิกสำเร็จ!', text: 'ลูกค้ารายนี้ถูกเตะออกจากแพ็กเกจทันที', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         } else if (mode === 'end_of_period') {
@@ -274,14 +261,15 @@ export default function AdminCustomersPage() {
           const { error } = await supabase.from('subscriptions').update({ details: updatedDetails }).eq('id', sub.id);
           if (error) throw error;
 
-          const alertMessage = `🟡 [แจ้งเตือน] ลูกค้าแจ้งขอยกเลิกเมื่อหมดรอบบิล\n----------------------\n🛍️ แบรนด์: ${sub.products?.name}\n🏠 บ้าน: ${sub.master_accounts?.email || 'ยังไม่จัดบ้าน'}\n👤 ลูกค้า: ${sub.users?.email}\n📅 ใช้งานได้ถึง: ${new Date(sub.end_date).toLocaleDateString('th-TH')}\n📄 เหตุผล: ${reason}`;
+          const alertMessage = `🟡 [แจ้งเตือน] ลูกค้าแจ้งขอยกเลิกเมื่อหมดรอบบิล\n----------------------\n🛍️ แบรนด์: ${prodName}\n🏠 บ้าน: ${houseEmail || 'ยังไม่จัดบ้าน'}\n👤 ลูกค้า: ${userEmail}\n📅 ใช้งานได้ถึง: ${new Date(sub.end_date).toLocaleDateString('th-TH')}\n📄 เหตุผล: ${reason}`;
           await sendLineAdmin(alertMessage).catch(e => console.error(e));
 
           Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', text: `ระบบจะเตะลูกค้าออกอัตโนมัติเมื่อถึงวันที่ ${new Date(sub.end_date).toLocaleDateString('th-TH')}`, confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         }
         await fetchData();
-      } catch (error: any) {
-        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.message, confirmButtonColor: '#ef4444' });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: message, confirmButtonColor: '#ef4444' });
       }
     }
   };
@@ -291,13 +279,24 @@ export default function AdminCustomersPage() {
   }
 
   const groupedUsers = Array.from(subscriptions.reduce((acc, sub) => {
-    const email = sub.users?.email || 'unknown';
+    const user = sub.users as { id: string; display_name: string; email: string } | { id: string; display_name: string; email: string }[] | null;
+    const actualUser = Array.isArray(user) ? user[0] : user;
+    const email = actualUser?.email || 'unknown';
+    
     if (!acc.has(email)) {
-      acc.set(email, { userId: (sub.users as any)?.id || email, displayName: sub.users?.display_name || 'ไม่ระบุชื่อ', email: email, subs: [] });
+      acc.set(email, { 
+        userId: actualUser?.id || email, 
+        displayName: actualUser?.display_name || 'ไม่ระบุชื่อ', 
+        email: email, 
+        subs: [] 
+      });
     }
-    acc.get(email).subs.push(sub);
+    const existingGroup = acc.get(email);
+    if (existingGroup) {
+      existingGroup.subs.push(sub);
+    }
     return acc;
-  }, new Map()).values());
+  }, new Map<string, GroupedUser>()).values());
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -320,10 +319,10 @@ export default function AdminCustomersPage() {
               </tr>
             </thead>
             <tbody className="text-sm">
-              {groupedUsers.map((user: any) => {
+              {groupedUsers.map((user: GroupedUser) => {
                 const isExpanded = expandedUserId === user.userId;
-                const activeCount = user.subs.filter((s: any) => s.status === 'active' && new Date(s.end_date) >= new Date()).length;
-                const pendingCount = user.subs.filter((s: any) => s.status === 'pending').length;
+                const activeCount = user.subs.filter((s) => s.status === 'active' && calculateDaysLeft(s.end_date) >= 0).length;
+                const pendingCount = user.subs.filter((s) => s.status === 'pending').length;
                 const totalCount = user.subs.length;
 
                 return (
@@ -376,15 +375,15 @@ export default function AdminCustomersPage() {
                                   const isShowingCancelled = showCancelledFor.has(user.userId);
 
                                   const activeSubs = user.subs
-                                    .filter((s: any) => s.status !== 'cancelled')
-                                    .sort((a: any, b: any) =>
-                                      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+                                    .filter((s) => s.status !== 'cancelled')
+                                    .sort((a, b) =>
+                                      new Date(b.end_date).getTime() - new Date(a.end_date).getTime()
                                     );
 
                                   const cancelledSubs = user.subs
-                                    .filter((s: any) => s.status === 'cancelled')
-                                    .sort((a: any, b: any) =>
-                                      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+                                    .filter((s) => s.status === 'cancelled')
+                                    .sort((a, b) =>
+                                      new Date(b.end_date).getTime() - new Date(a.end_date).getTime()
                                     );
 
                                   const visibleSubs = isShowingCancelled
@@ -393,16 +392,16 @@ export default function AdminCustomersPage() {
 
                                   return (
                                     <>
-                                      {visibleSubs.map((sub: any) => {
-                                        const isExpired = new Date(sub.end_date) < new Date();
-                                        const pendingPayment = sub.payments?.find((p: any) => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+                                      {visibleSubs.map((sub) => {
+                                        const isExpired = isSubExpired(sub);
+                                        const pendingPayment = sub.payments?.find((p) => p.status === 'รอตรวจสอบ' || p.status === 'pending');
                                         const needsAttention = sub.status === 'pending' || pendingPayment;
                                         const isWaitingCancel = sub.details?.cancelAtPeriodEnd === true;
 
                                         return (
                                           <tr key={sub.id} className="border-b border-gray-100/50 last:border-0 hover:bg-white/60">
                                             <td className="py-3 text-sm text-gray-800 font-medium">
-                                              {sub.products?.name || 'N/A'}
+                                              {Array.isArray(sub.products) ? sub.products[0]?.name : (sub.products as any)?.name || 'N/A'}
                                               {pendingPayment && (
                                                 <span className="ml-2 inline-flex items-center text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">มีสลิปใหม่</span>
                                               )}
@@ -416,7 +415,9 @@ export default function AdminCustomersPage() {
                                             </td>
                                             <td className="py-3 text-sm">
                                               {sub.master_accounts ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 text-[11px] shadow-sm">{sub.master_accounts.email}</span>
+                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 text-[11px] shadow-sm">
+                                                   {Array.isArray(sub.master_accounts) ? sub.master_accounts[0]?.email : (sub.master_accounts as any)?.email}
+                                                 </span>
                                               ) : (
                                                 <span className="text-gray-400 text-xs italic">ยังไม่จัดบ้าน</span>
                                               )}
@@ -511,30 +512,36 @@ export default function AdminCustomersPage() {
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
 
               {/* ส่วนแสดงรายละเอียดแพ็กเกจ (รายเดือน/รายปี และราคา) */}
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-2">
-                <p className="text-xs text-gray-500 uppercase font-bold mb-2 tracking-wider">ข้อมูลลูกค้า & แพ็กเกจที่เลือก</p>
-                <div className="mb-2">
-                  <p className="font-bold text-gray-800 text-sm">{selectedSub.users?.display_name}</p>
-                  <p className="text-xs text-gray-500">{selectedSub.users?.email}</p>
-                </div>
+              {(() => {
+                const user = Array.isArray(selectedSub.users) ? selectedSub.users[0] : (selectedSub.users as any);
+                const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
+                return (
+                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-2">
+                    <p className="text-xs text-gray-500 uppercase font-bold mb-2 tracking-wider">ข้อมูลลูกค้า & แพ็กเกจที่เลือก</p>
+                    <div className="mb-2">
+                      <p className="font-bold text-gray-800 text-sm">{user?.display_name || 'ไม่ระบุชื่อ'}</p>
+                      <p className="text-xs text-gray-500">{user?.email || ''}</p>
+                    </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-gray-200 border-dashed">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-bold text-blue-600">{selectedSub.products?.name}</p>
-                    {/* เช็กและแสดง Badge รายปี/รายเดือน */}
-                    {selectedSub.billing_cycle === 'yearly' ? (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
-                    )}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200 border-dashed">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-blue-600">{product?.name || 'N/A'}</p>
+                        {/* เช็กและแสดง Badge รายปี/รายเดือน */}
+                        {selectedSub.billing_cycle === 'yearly' ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
+                        )}
+                      </div>
+                      {selectedSub.details?.expectedPrice && (
+                        <p className="text-sm font-black text-green-600">
+                          ฿{Number(selectedSub.details.expectedPrice).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {selectedSub.details?.expectedPrice && (
-                    <p className="text-sm font-black text-green-600">
-                      ฿{Number(selectedSub.details.expectedPrice).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  )}
-                </div>
-              </div>
+                );
+              })()}
 
               {/* ส่วนแสดงสลิปโอนเงิน และปุ่มปฏิเสธ */}
               {(() => {
@@ -579,9 +586,12 @@ export default function AdminCustomersPage() {
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-gray-800 focus:border-gray-800 outline-none transition-colors"
                 >
                   <option value="">-- ไม่ระบุ (เว้นว่าง) --</option>
-                  {masterAccounts.filter(house => house.product_id === selectedSub.products?.id).map(house => (
-                    <option key={house.id} value={house.id}>{house.email}</option>
-                  ))}
+                  {(() => {
+                    const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
+                    return masterAccounts.filter(house => house.product_id === product?.id).map(house => (
+                      <option key={house.id} value={house.id}>{house.email}</option>
+                    ));
+                  })()}
                 </select>
               </div>
 

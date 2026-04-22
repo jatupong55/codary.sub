@@ -2,9 +2,10 @@
 'use client';
 
 import Image from 'next/image';
+import type { UserProfile } from '@/types/dashboard';
 
 interface HeaderProps {
-  userProfile: any;
+  userProfile: UserProfile;
   onLogout: () => void;
 }
 
@@ -30,8 +31,24 @@ export default function Header({ userProfile, onLogout }: HeaderProps) {
       </div>
 
       <div className="relative z-10 flex flex-col items-end gap-2.5">
-        <div className="p-1 bg-white/80 backdrop-blur-sm rounded-full shadow-sm border border-gray-100">
-          <img src={userProfile.avatar_url} alt="Profile" className="w-12 h-12 rounded-full object-cover transition-transform duration-300 hover:scale-105" />
+        <div className="flex items-center gap-3">
+          {userProfile.line_user_id ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-green-50 border border-green-100 text-[#00C300] text-[10px] font-bold shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-[#00C300] animate-pulse"></span>
+              LINE เชื่อมต่อแล้ว
+            </div>
+          ) : (
+            <a 
+              href={`https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${process.env.NEXT_PUBLIC_LINE_LOGIN_CLIENT_ID}&redirect_uri=${process.env.NEXT_PUBLIC_LINE_LOGIN_REDIRECT_URI}&state=${userProfile.id}&scope=profile%20openid`}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#00C300] text-white text-[11px] font-bold hover:bg-[#00a300] transition-all shadow-lg shadow-green-100 hover:shadow-green-200 active:scale-95"
+            >
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M22.25 10.5c0-4.694-4.597-8.5-10.25-8.5S1.75 5.806 1.75 10.5c0 4.204 3.655 7.714 8.59 8.368.334.072.787.221.9.507.103.259.068.665-.033 1.102l-.15 1.055c-.045.311-.219 1.216.945.663 1.164-.553 6.284-3.702 8.567-6.335 1.564-1.803 1.681-3.321 1.681-4.358z"/></svg>
+              เชื่อมต่อ LINE
+            </a>
+          )}
+          <div className="p-1 bg-white/80 backdrop-blur-sm rounded-full shadow-sm border border-gray-100">
+            <img src={userProfile.avatar_url || ''} alt="Profile" className="w-12 h-12 rounded-full object-cover transition-transform duration-300 hover:scale-105" />
+          </div>
         </div>
         <button onClick={onLogout} className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-50/80 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all duration-300 active:scale-95">
           <span className="text-[11px] font-semibold text-gray-500 group-hover:text-red-600 transition-colors duration-300">ออกจากระบบ</span>

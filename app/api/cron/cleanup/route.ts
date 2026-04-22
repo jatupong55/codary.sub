@@ -11,7 +11,9 @@ const supabaseAdmin = createClient(
 export async function GET(request: Request) {
   // --- Security Check ---
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && !isVercelCron) {
     return NextResponse.json({ error: 'Unauthorized: ระบุรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
   }
 
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
 
     if (abandonedSubs) {
       const subsToDelete = abandonedSubs
-        .filter(sub => !sub.payments || sub.payments.every((p: any) => p.status !== 'รอตรวจสอบ' && p.status !== 'pending'))
+        .filter(sub => !sub.payments || (sub.payments as { status: string }[]).every((p) => p.status !== 'รอตรวจสอบ' && p.status !== 'pending'))
         .map(sub => sub.id);
 
       if (subsToDelete.length > 0) {
@@ -80,9 +82,9 @@ export async function GET(request: Request) {
         // 2. เตรียมข้อมูลสรุป
         const isScheduledCancel = sub.details?.cancelAtPeriodEnd === true;
         const reason = isScheduledCancel ? 'ยกเลิกเมื่อหมดรอบบิล' : 'หมดอายุ';
-        const brand = (sub.products as any)?.name || 'ไม่ระบุ';
-        const email = (sub.users as any)?.email || 'ไม่ระบุอีเมล';
-        const house = (sub.master_accounts as any)?.email || 'ยังไม่จัดบ้าน';
+        const brand = (sub.products as { name?: string } | null)?.name || 'ไม่ระบุ';
+        const email = (sub.users as { email?: string } | null)?.email || 'ไม่ระบุอีเมล';
+        const house = (sub.master_accounts as { email?: string } | null)?.email || 'ยังไม่จัดบ้าน';
         
         // ดันข้อความสั้นๆ เข้า Array
         kickSummaryList.push(`- ${email} | 🏠 ${house}\n  [${brand}] ${reason}`);
@@ -104,7 +106,7 @@ export async function GET(request: Request) {
       message: 'Cronjob (Cleanup) ทำงานสำเร็จ!'
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Cron Cleanup Error:', error);
     return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดในระบบเคลียร์บ้าน' }, { status: 500 });
   }

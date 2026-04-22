@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
     if (fetchSubError) throw fetchSubError;
 
-    const productsData: any = subData.products;
+    const productsData = subData.products as { category?: string } | { category?: string }[] | null;
     const category = Array.isArray(productsData) ? productsData[0]?.category : productsData?.category;
     const details = subData.details || {};
 
@@ -168,7 +168,7 @@ export async function POST(request: Request) {
       newEndDate: newEndDate.toISOString()
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API Error:', error);
     return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์' }, { status: 500 });
   }

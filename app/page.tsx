@@ -37,7 +37,7 @@ export default function Home() {
   // ฟังก์ชันกดปุ่ม Login ด้วย Google (ของจริง)
   const handleGoogleLogin = async () => {
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
@@ -48,9 +48,10 @@ export default function Home() {
         console.error('Supabase Error:', error.message);
         alert(`เกิดข้อผิดพลาดจาก Supabase: ${error.message}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
       console.error('System Error:', err);
-      alert(`ระบบขัดข้อง: ${err.message}`);
+      alert(`ระบบขัดข้อง: ${message}`);
     }
   };
 
@@ -66,8 +67,9 @@ export default function Home() {
       if (error) throw error;
       
       router.push('/dashboard'); // ล็อกอินสำเร็จ เข้าสู่ระบบเลย (จะถูกเตะไปหน้า /admin เองถ้า role เป็น admin)
-    } catch (err: any) {
-      alert(`Test Login Error: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาด';
+      alert(`Test Login Error: ${message}`);
     } finally {
       setIsTestLoading(false);
     }

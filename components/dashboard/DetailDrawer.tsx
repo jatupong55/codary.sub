@@ -3,13 +3,14 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { calculateStackedPayment } from '@/utils/dashboardUtils';
+import { calculateStackedPayment } from '@/utils/subscriptionUtils';
+import type { DashboardSubscription, UserProfile, Payment } from '@/types/dashboard';
 
 interface DetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  sub: any;
-  userProfile: any;
+  sub: DashboardSubscription;
+  userProfile: UserProfile;
 }
 
 const getBrandStyle = (category: string) => {
@@ -34,7 +35,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
   const [shouldRender, setShouldRender] = useState(false);
   const [showAnimation, setShowAnimation] = useState(false);
   const [activeSub, setActiveSub] = useState(sub);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoadingPayments, setIsLoadingPayments] = useState(false);
   const [toast, setToast] = useState<{ show: boolean, message: string }>({ show: false, message: '' });
   const [selectedSlip, setSelectedSlip] = useState<string | null>(null);
@@ -68,8 +69,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
   }, [isOpen, sub]);
 
   if (!shouldRender || !activeSub) return null;
-
-  const product = activeSub.products || {};
+  const product = Array.isArray(activeSub.products) ? activeSub.products[0] : (activeSub.products || {} as any);
   const details = activeSub.details || {};
   
   // เช็กว่าใช่ Spotify ไหม เพื่อโชว์ข้อมูลลิงก์เข้ากลุ่ม
@@ -168,7 +168,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                         <div className="flex-1 bg-white p-3 rounded-xl border border-gray-100 text-sm font-medium text-gray-700 leading-relaxed">
                           {details.address || 'รอข้อมูลจาก Admin'}
                         </div>
-                        <button onClick={() => handleCopy(details.address, 'ที่อยู่')} className="bg-white p-3 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors text-gray-500 group flex items-center justify-center">
+                        <button onClick={() => handleCopy(details.address || '', 'ที่อยู่')} className="bg-white p-3 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors text-gray-500 group flex items-center justify-center">
                           <svg className="w-4 h-4 group-hover:scale-110 transition-transform" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor">
                             <path d="M208 0H332.1c12.7 0 24.9 5.1 33.9 14.1l67.9 67.9c9 9 14.1 21.2 14.1 33.9V336c0 26.5-21.5 48-48 48H208c-26.5 0-48-21.5-48-48V48c0-26.5 21.5-48 48-48zM48 128h80v64H64V448H256V416h64v48c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V176c0-26.5 21.5-48 48-48z"/>
                           </svg>
@@ -179,7 +179,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                       <div>
                         <label className="text-[10px] font-bold text-gray-400 uppercase mb-2 block">ลิงก์เข้าร่วม Family</label>
                         <button 
-                          onClick={() => handleCopy(details.inviteLink, 'ลิงก์คำเชิญ Spotify')} 
+                          onClick={() => handleCopy(details.inviteLink || '', `ลิงก์คำเชิญ ${product.category || 'Spotify'}`)} 
                           className="w-full bg-[#2D2D2D] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2.5"
                         >
                           <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" fill="currentColor">
@@ -280,7 +280,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
                         </span>
                         {payment.slip_url && (
                           <button 
-                            onClick={() => setSelectedSlip(payment.slip_url)} 
+                            onClick={() => setSelectedSlip(payment.slip_url || null)} 
                             className="flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-blue-500 transition-colors"
                           >
                             ดูสลิป
@@ -299,7 +299,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
             <section className="pt-4 space-y-3 pb-10">
               <button 
                 onClick={() => {
-                  const message = `🚨 แจ้งปัญหาการใช้งาน\n\nแพ็กเกจ: ${product.name}\nบัญชี: ${userProfile?.email}\n\nรายละเอียดปัญหา: `;
+                  const message = `🚨 แจ้งปัญหาการใช้งาน\n\nแพ็กเกจ: ${product.name || 'N/A'}\nบัญชี: ${userProfile?.email || ''}\n\nรายละเอียดปัญหา: `;
                   const encodedText = encodeURIComponent(message);
                   window.open(`https://line.me/R/oaMessage/@367sxicn/?${encodedText}`, '_blank');
                 }} 
@@ -314,7 +314,7 @@ export default function DetailDrawer({ isOpen, onClose, sub, userProfile }: Deta
               <button 
                 onClick={() => {
                   if(confirm('คุณต้องการแจ้งยกเลิกแพ็กเกจนี้ใช่หรือไม่? ระบบจะพาคุณไปยัง LINE เพื่อยืนยันกับแอดมิน')) {
-                    const message = `💔 แจ้งยกเลิกแพ็กเกจ / ออกจากกลุ่ม\n\nแพ็กเกจ: ${product.name}\nบัญชี: ${userProfile?.email}\n\nเหตุผลที่ต้องการยกเลิก: `;
+                    const message = `💔 แจ้งยกเลิกแพ็กเกจ / ออกจากกลุ่ม\n\nแพ็กเกจ: ${product.name || 'N/A'}\nบัญชี: ${userProfile?.email || ''}\n\nเหตุผลที่ต้องการยกเลิก: `;
                     const encodedText = encodeURIComponent(message);
                     window.open(`https://line.me/R/oaMessage/@367sxicn/?${encodedText}`, '_blank');
                   }

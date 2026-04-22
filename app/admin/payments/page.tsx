@@ -85,7 +85,7 @@ export default function AdminPaymentsPage() {
       .order('created_at', { ascending: false });
 
     if (data && !error) {
-      setPayments(data as any);
+      setPayments(data as unknown as Payment[]);
     }
     setIsLoading(false);
   };
@@ -141,12 +141,13 @@ export default function AdminPaymentsPage() {
       });
 
       await fetchPayments(); 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอนุมัติ';
       console.error('Approval error:', error);
       Swal.fire({
         icon: 'error',
         title: 'อัปเดตไม่สำเร็จ',
-        text: error.message || 'เกิดข้อผิดพลาดในการอนุมัติ',
+        text: message,
         confirmButtonColor: '#ef4444',
         customClass: { popup: 'rounded-2xl' }
       });
@@ -190,12 +191,13 @@ export default function AdminPaymentsPage() {
       });
 
       await fetchPayments(); 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการปฏิเสธสลิป';
       console.error('Rejection error:', error);
       Swal.fire({
         icon: 'error',
         title: 'ทำรายการไม่สำเร็จ',
-        text: error.message || 'เกิดข้อผิดพลาดในการปฏิเสธสลิป',
+        text: message,
         confirmButtonColor: '#ef4444',
         customClass: { popup: 'rounded-2xl' }
       });
@@ -229,7 +231,7 @@ export default function AdminPaymentsPage() {
         {['รอตรวจสอบ', 'สำเร็จ', 'ยกเลิก', 'ทั้งหมด'].map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab as any)}
+            onClick={() => setActiveTab(tab as 'รอตรวจสอบ' | 'สำเร็จ' | 'ยกเลิก' | 'ทั้งหมด')}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
               activeTab === tab
                 ? 'bg-gray-800 text-white'

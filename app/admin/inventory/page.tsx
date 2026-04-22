@@ -4,35 +4,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { format } from "date-fns";
-import { th } from "date-fns/locale";
-
-interface Product {
-    id: string;
-    name: string;
-    category: string;
-}
-
-interface Subscription {
-    id: string;
-    status: string;
-}
-
-interface MasterAccount {
-    id: string;
-    email: string;
-    password?: string;
-    max_slots: number;
-    cost: number;
-    billing_cycle: 'monthly' | 'yearly';
-    status: string;
-    next_renewal_date?: string;
-    products?: Product;
-    subscriptions?: Subscription[];
-    details?: any;
-}
+import InventoryModal from '@/components/admin/InventoryModal';
+import { formatCurrency } from '@/utils/subscriptionUtils';
+import type { MasterAccount, Product, InventoryFormData, InventoryDetailsData } from '@/types/admin';
 
 export default function AdminInventoryPage() {
     const [isLoading, setIsLoading] = useState(true);
@@ -44,22 +18,28 @@ export default function AdminInventoryPage() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     const [editId, setEditId] = useState<string | null>(null);
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<InventoryFormData>({
         product_id: '',
         email: '',
         password: '',
         max_slots: 6,
         cost: 0,
-        billing_cycle: '',
+        billing_cycle: 'monthly',
         status: 'active',
-        next_renewal_date: '' // ใช้ string ปกติได้เลย Library จัดการให้
+        next_renewal_date: '',
     });
 
-    const [editDetails, setEditDetails] = useState({
+    const [editDetails, setEditDetails] = useState<InventoryDetailsData>({
         address: '',
         inviteLink: '',
-        note: ''
+        note: '',
     });
+
+    // สำหรับดูสมาชิกในบ้าน
+    const [selectedHouse, setSelectedHouse] = useState<MasterAccount | null>(null);
+    const [isHouseDetailOpen, setIsHouseDetailOpen] = useState(false);
+    const [houseMembers, setHouseMembers] = useState<any[]>([]);
+    const [isFetchingMembers, setIsFetchingMembers] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -85,32 +65,51 @@ export default function AdminInventoryPage() {
                 .order('created_at', { ascending: false });
 
             if (accError) throw accError;
-            setAccounts((accData as any) || []);
-        } catch (error: any) {
-            console.error('Fetch Inventory Error:', error);
-            Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: error.message, confirmButtonColor: '#111827' });
+            setAccounts((accData as unknown as MasterAccount[]) || []);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+            Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: message, confirmButtonColor: '#111827' });
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleViewMembers = async (account: MasterAccount) => {
+        setSelectedHouse(account);
+        setIsHouseDetailOpen(true);
+        setIsFetchingMembers(true);
+        try {
+            const { data: members } = await supabase
+                .from('subscriptions')
+                .select('id, start_date, end_date, status, users(display_name, email)')
+                .eq('master_account_id', account.id)
+                .eq('status', 'active');
+            setHouseMembers(members || []);
+        } catch (error) {
+            console.error('Error fetching house members:', error);
+        } finally {
+            setIsFetchingMembers(false);
         }
     };
 
     const handleOpenModal = (account?: MasterAccount) => {
         if (account) {
             setEditId(account.id);
+            const product = Array.isArray(account.products) ? account.products[0] : (account.products as any);
             setFormData({
-                product_id: account.products?.id || '',
+                product_id: product?.id || '',
                 email: account.email,
                 password: account.password || '',
                 max_slots: account.max_slots,
                 cost: account.cost ?? 0,
                 billing_cycle: account.billing_cycle || 'monthly',
                 status: account.status,
-                next_renewal_date: account.next_renewal_date ? account.next_renewal_date.split('T')[0] : ''
+                next_renewal_date: account.next_renewal_date ? account.next_renewal_date.split('T')[0] : '',
             });
             setEditDetails({
                 address: account.details?.address || '',
                 inviteLink: account.details?.inviteLink || '',
-                note: account.details?.note || ''
+                note: account.details?.note || '',
             });
         } else {
             setEditId(null);
@@ -122,7 +121,7 @@ export default function AdminInventoryPage() {
                 cost: 0,
                 billing_cycle: 'monthly',
                 status: 'active',
-                next_renewal_date: ''
+                next_renewal_date: '',
             });
             setEditDetails({ address: '', inviteLink: '', note: '' });
         }
@@ -149,7 +148,7 @@ export default function AdminInventoryPage() {
             billing_cycle: formData.billing_cycle,
             status: formData.status,
             next_renewal_date: formData.next_renewal_date || null,
-            details: editDetails
+            details: editDetails,
         };
 
         try {
@@ -167,11 +166,12 @@ export default function AdminInventoryPage() {
                 title: 'บันทึกสำเร็จ',
                 text: editId ? 'อัปเดตข้อมูลบ้านเรียบร้อย' : 'เพิ่มบ้านหลังใหม่เรียบร้อย',
                 confirmButtonColor: '#111827',
-                customClass: { popup: 'rounded-2xl' }
+                customClass: { popup: 'rounded-2xl' },
             });
             await fetchData();
-        } catch (error: any) {
-            Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: error.message, confirmButtonColor: '#ef4444' });
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+            Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message, confirmButtonColor: '#ef4444' });
         } finally {
             setIsProcessing(false);
         }
@@ -187,7 +187,7 @@ export default function AdminInventoryPage() {
             cancelButtonColor: '#9ca3af',
             confirmButtonText: 'ใช่, ลบเลย!',
             cancelButtonText: 'ยกเลิก',
-            customClass: { popup: 'rounded-2xl' }
+            customClass: { popup: 'rounded-2xl' },
         });
 
         if (!confirmResult.isConfirmed) return;
@@ -198,17 +198,22 @@ export default function AdminInventoryPage() {
 
             Swal.fire({ icon: 'success', title: 'ลบสำเร็จ!', text: 'ลบข้อมูลบ้านออกจากระบบแล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
             await fetchData();
-        } catch (error: any) {
-            Swal.fire({ icon: 'error', title: 'ลบไม่ได้', text: error.code === '23503' ? 'ไม่สามารถลบได้เนื่องจากยังมีลูกค้าเชื่อมโยงกับบ้านนี้อยู่ (ให้ย้ายลูกค้าออกก่อน)' : error.message, confirmButtonColor: '#ef4444' });
+        } catch (error: unknown) {
+            const isFK = (error as { code?: string })?.code === '23503';
+            const message = isFK
+                ? 'ไม่สามารถลบได้เนื่องจากยังมีลูกค้าเชื่อมโยงกับบ้านนี้อยู่ (ให้ย้ายลูกค้าออกก่อน)'
+                : error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+            Swal.fire({ icon: 'error', title: 'ลบไม่ได้', text: message, confirmButtonColor: '#ef4444' });
         }
     };
 
     if (isLoading) {
-        return <div className="h-full flex items-center justify-center min-h-[400px]"><div className="animate-spin w-10 h-10 border-4 border-gray-800 border-t-transparent rounded-full"></div></div>;
+        return (
+            <div className="h-full flex items-center justify-center min-h-[400px]">
+                <div className="animate-spin w-10 h-10 border-4 border-gray-800 border-t-transparent rounded-full" />
+            </div>
+        );
     }
-
-    const selectedProduct = products.find(p => p.id === formData.product_id);
-    const isSpotify = selectedProduct?.category?.toLowerCase().trim() === 'spotify';
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
@@ -233,70 +238,90 @@ export default function AdminInventoryPage() {
                             <tr className="bg-gray-50/50 border-b border-gray-200 text-sm text-gray-500">
                                 <th className="px-6 py-4 font-medium">บัญชีบ้าน (Email)</th>
                                 <th className="px-6 py-4 font-medium">แพ็กเกจ (Product)</th>
-                                <th className="px-6 py-4 font-medium min-w-[200px]">โควตาที่ใช้ไป (Slots)</th>
-                                <th className="px-6 py-4 font-medium">วันต่ออายุบ้าน</th>
+                                <th className="px-6 py-4 font-medium min-w-[200px]">ความหนาแน่น (Slots)</th>
+                                <th className="px-6 py-4 font-medium text-right">กำไร (Profit/mo)</th>
                                 <th className="px-6 py-4 font-medium text-right">จัดการ</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm">
                             {accounts.map((acc) => {
-                                const usedSlots = acc.subscriptions?.filter(sub => sub.status === 'active').length || 0;
+                                const usedSlots = acc.subscriptions?.filter((sub) => sub.status === 'active').length || 0;
                                 const maxSlots = acc.max_slots;
-                                const percentFull = Math.min((usedSlots / maxSlots) * 100, 100);
+                                // ✅ Bug Fix: ป้องกัน division by zero เมื่อ maxSlots = 0
+                                const percentFull = maxSlots > 0 ? Math.min((usedSlots / maxSlots) * 100, 100) : 0;
                                 const isFull = usedSlots >= maxSlots;
-
                                 const isExpired = acc.next_renewal_date && new Date(acc.next_renewal_date) < new Date();
 
                                 return (
-                                    <tr key={acc.id} className="border-b border-gray-100/50 hover:bg-white/40 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-800">{acc.email}</div>
+                                <tr key={acc.id} className="border-b border-gray-100/50 hover:bg-white/40 transition-all group">
+                                    <td className="px-6 py-4">
+                                        <button 
+                                            onClick={() => handleViewMembers(acc)}
+                                            className="text-left group/btn"
+                                        >
+                                            <div className="font-bold text-gray-800 group-hover/btn:text-blue-600 transition-colors flex items-center gap-1.5">
+                                                {acc.email}
+                                                <svg className="w-3.5 h-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                            </div>
                                             <div className="text-xs text-gray-400 font-mono mt-0.5">PWD: {acc.password || 'ไม่ระบุ'}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200">
-                                                {acc.products?.name || 'N/A'}
-                                            </span>
-                                            <span className={`ml-1.5 inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${acc.billing_cycle === 'yearly'
-                                                    ? 'bg-purple-100 text-purple-700'
-                                                    : 'bg-blue-100 text-blue-700'
-                                                }`}>
+                                        </button>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200">
+                                            {(() => {
+                                                const product = Array.isArray(acc.products) ? acc.products[0] : (acc.products as any);
+                                                return product?.name || 'N/A';
+                                            })()}
+                                        </span>
+                                        <div className="mt-1">
+                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${acc.billing_cycle === 'yearly' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                                 {acc.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 min-w-[200px]">
-                                            <div className="flex items-center justify-between text-xs mb-1 gap-4 whitespace-nowrap">
-                                                <span className="font-semibold text-gray-700">{usedSlots} / {maxSlots}</span>
-                                                <span className={isFull ? 'text-red-500 font-bold' : 'text-green-600 font-medium'}>
-                                                    {isFull ? 'เต็มแล้ว' : `ว่าง ${maxSlots - usedSlots} ที่`}
-                                                </span>
-                                            </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                                <div className={`h-2 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${percentFull}%` }}></div>
-                                            </div>
-                                        </td>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 min-w-[200px]">
+                                        <div className="flex items-center justify-between text-xs mb-1 gap-4 whitespace-nowrap">
+                                            <span className="font-semibold text-gray-700">{usedSlots} / {maxSlots}</span>
+                                            <span className={isFull ? 'text-red-500 font-bold' : 'text-green-600 font-medium'}>
+                                                {isFull ? 'เต็มแล้ว' : `ว่าง ${maxSlots - usedSlots} ที่`}
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                                className={`h-1.5 rounded-full transition-all duration-500 ${isFull ? 'bg-red-500' : 'bg-green-500'}`}
+                                                style={{ width: `${percentFull}%` }}
+                                            />
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        {(() => {
+                                            const product = Array.isArray(acc.products) ? acc.products[0] : (acc.products as any);
+                                            const productPrice = product?.price || 0;
+                                            const estimatedRevenue = usedSlots * productPrice;
+                                            const monthlyCost = acc.billing_cycle === 'yearly' ? (acc.cost || 0) / 12 : (acc.cost || 0);
+                                            const profit = estimatedRevenue - monthlyCost;
 
-                                        {/* [UPDATE] แสดงผลในตารางแบบ วัน/เดือน/ปี (DD/MM/YYYY) */}
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {acc.next_renewal_date ? (
-                                                <span className={`px-2 py-1 rounded text-xs font-bold ${isExpired ? 'bg-red-100 text-red-700' : 'text-gray-700'}`}>
-                                                    {new Date(acc.next_renewal_date).toLocaleDateString('th-TH', {
-                                                        day: '2-digit',
-                                                        month: '2-digit',
-                                                        year: 'numeric'
-                                                    })}
-                                                </span>
-                                            ) : (
-                                                <span className="text-gray-400 text-xs italic">ไม่ได้ระบุ</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-right whitespace-nowrap">
-                                            <div className="flex justify-end gap-2">
-                                                <button onClick={() => handleOpenModal(acc)} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors shadow-sm">แก้ไข</button>
-                                                <button onClick={() => handleDelete(acc.id, acc.email)} className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors shadow-sm">ลบ</button>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                            return (
+                                                <div className="flex flex-col items-end">
+                                                    <span className={`font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                        ฿{formatCurrency(profit)}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400">หักต้นทุนแล้ว</span>
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
+                                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => handleOpenModal(acc)} className="p-2 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-all shadow-sm active:scale-95">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                            </button>
+                                            <button onClick={() => handleDelete(acc.id, acc.email)} className="p-2 bg-white border border-red-100 text-red-500 rounded-xl hover:bg-red-50 transition-all shadow-sm active:scale-95">
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
                                 );
                             })}
                             {accounts.length === 0 && (
@@ -311,180 +336,84 @@ export default function AdminInventoryPage() {
                 </div>
             </div>
 
-            {isModalOpen && (
-                <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
-                    <div className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-300 ease-in-out ${isAnimating ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}>
-                        <div className="relative px-6 py-5 flex justify-between items-center bg-gradient-to-r from-[#BCE2E8]/40 via-white to-[#BCE2E8]/20 border-b border-[#BCE2E8]/30 overflow-hidden">
-                            <div className="absolute top-0 right-0 w-40 h-40 bg-white/60 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#BCE2E8]/50 rounded-full blur-2xl -ml-10 -mb-10 pointer-events-none"></div>
-                            <h3 className="text-lg font-bold text-gray-800 tracking-wide relative z-10 flex items-center gap-2">
-                                <svg className="w-5 h-5 text-[#8ABAC2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                </svg>
-                                {editId ? 'แก้ไขข้อมูลบ้าน' : 'เพิ่มบ้านใหม่'}
-                            </h3>
-                            <button type="button" onClick={handleCloseModal} className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/60 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm transition-all">✕</button>
-                        </div>
-
-                        <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">แพ็กเกจสินค้า</label>
-                                <select
-                                    required
-                                    value={formData.product_id}
-                                    onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors"
-                                >
-                                    <option value="" disabled>-- เลือกแพ็กเกจ --</option>
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.category})</option>)}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">อีเมลบ้าน (Master Account Email)</label>
-                                <input
-                                    type="email"
-                                    required
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    placeholder="เช่น spotify_family1@gmail.com"
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+            {/* === Member Details Drawer === */}
+            {isHouseDetailOpen && (
+                <div className="fixed inset-0 z-[60] overflow-hidden">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setIsHouseDetailOpen(false)} />
+                    <div className="absolute right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl transition-transform duration-300">
+                        <div className="h-full flex flex-col p-8">
+                            <div className="flex justify-between items-start mb-6">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">รหัสผ่าน (ถ้ามี)</label>
-                                    <input
-                                        type="text"
-                                        value={formData.password}
-                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                        placeholder="รหัสผ่านเข้าเมล"
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all"
-                                    />
+                                    <h2 className="text-xl font-black text-gray-800">สมาชิกในบ้าน</h2>
+                                    <p className="text-sm text-gray-500 mt-1">{selectedHouse?.email}</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">โควตาสูงสุด (Slots)</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        required
-                                        value={formData.max_slots}
-                                        onChange={(e) => setFormData({ ...formData, max_slots: parseInt(e.target.value) })}
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all"
-                                    />
-                                </div>
+                                <button onClick={() => setIsHouseDetailOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+                                    <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">ต้นทุน/รอบ (บาท)</label>
-                                    <input type="number" min="0" step="0.01" value={formData.cost}
-                                        onChange={(e) => setFormData({ ...formData, cost: parseFloat(e.target.value) || 0 })}
-                                        placeholder="เช่น 180.00"
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">รอบบิลของบ้าน</label>
-                                    <select
-                                        value={formData.billing_cycle}
-                                        onChange={(e) => setFormData({ ...formData, billing_cycle: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors"
-                                    >
-                                        <option value="monthly">รายเดือน</option>
-                                        <option value="yearly">รายปี</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* ส่วน Datepicker แบบ Modern ที่ส่งค่า YYYY-MM-DD เข้าฐานข้อมูลอัตโนมัติ */}
-                            <div className="relative z-[100]">
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex justify-between">
-                                    <span>กำหนดวันต่ออายุแพ็กเกจหลัก</span>
-                                    <span className="text-xs text-gray-400 font-normal">ไม่ต้องกรอกก็ได้</span>
-                                </label>
-                                <DatePicker
-                                    // 1. อ่านค่าจาก String YYYY-MM-DD มาโชว์เป็นปฏิทิน
-                                    selected={formData.next_renewal_date ? new Date(formData.next_renewal_date) : null}
-
-                                    // 2. เมื่อกดเลือกวัน ให้แปลงกลับเป็น YYYY-MM-DD ส่งเข้า Database
-                                    onChange={(date: Date | null) => {
-                                        setFormData({
-                                            ...formData,
-                                            next_renewal_date: date ? format(date, 'yyyy-MM-dd') : ''
-                                        });
-                                    }}
-                                    dateFormat="dd/MM/yyyy"
-                                    locale={th}
-                                    placeholderText="วัน/เดือน/ปี"
-                                    isClearable
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-all"
-                                    wrapperClassName="w-full"
-                                />
-                                <p className="text-[10px] text-gray-400 mt-1">ใช้เพื่อเตือนแอดมินว่าต้องนำเงินไปจ่ายต้นทางเมื่อไหร่</p>
-                            </div>
-
-                            <div className="pt-2 border-t border-gray-100 mt-4">
-                                <h4 className="text-xs font-bold text-blue-600 mb-3 uppercase tracking-wider">ข้อมูลเพิ่มเติม (Details)</h4>
-
-                                {isSpotify ? (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-600 mb-1">ที่อยู่ครอบครัว</label>
-                                            <input
-                                                type="text"
-                                                placeholder="กรอกที่อยู่สำหรับยืนยันตัวตน"
-                                                value={editDetails.address}
-                                                onChange={(e) => setEditDetails({ ...editDetails, address: e.target.value })}
-                                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-blue-400 outline-none"
-                                            />
+                            <div className="flex-1 overflow-y-auto space-y-4">
+                                {isFetchingMembers ? (
+                                    [1, 2, 3].map(i => <div key={i} className="h-20 bg-gray-50 rounded-2xl animate-pulse" />)
+                                ) : houseMembers.length > 0 ? (
+                                    houseMembers.map(member => (
+                                        <div key={member.id} className="p-4 rounded-2xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors group">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-bold text-gray-800">{member.users?.display_name || 'ไม่ทราบชื่อ'}</p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">{member.users?.email}</p>
+                                                </div>
+                                                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">ACTIVE</span>
+                                            </div>
+                                            <div className="mt-3 flex items-center justify-between text-[10px] text-gray-400 border-t border-gray-100 pt-3">
+                                                <span>เริ่ม: {new Date(member.start_date).toLocaleDateString('th-TH')}</span>
+                                                <span className="font-bold text-gray-600">สิ้นสุด: {new Date(member.end_date).toLocaleDateString('th-TH')}</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-600 mb-1">ลิงก์คำเชิญ (Invite Link)</label>
-                                            <input
-                                                type="text"
-                                                placeholder="https://www.spotify.com/th/family/join/..."
-                                                value={editDetails.inviteLink}
-                                                onChange={(e) => setEditDetails({ ...editDetails, inviteLink: e.target.value })}
-                                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-blue-400 outline-none"
-                                            />
-                                        </div>
-                                    </div>
+                                    ))
                                 ) : (
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-600 mb-1">หมายเหตุถึงลูกค้า (Note)</label>
-                                        <textarea
-                                            placeholder="คำแนะนำ หรือข้อมูลการเข้าสู่ระบบ..."
-                                            value={editDetails.note}
-                                            onChange={(e) => setEditDetails({ ...editDetails, note: e.target.value })}
-                                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-blue-400 outline-none h-16 resize-none"
-                                        />
+                                    <div className="h-40 flex flex-col items-center justify-center text-gray-400 text-sm">
+                                        <svg className="w-12 h-12 mb-3 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                        ยังไม่มีสมาชิกในบ้านหลังนี้
                                     </div>
                                 )}
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">สถานะบัญชี</label>
-                                <select
-                                    value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-900 focus:bg-white focus:ring-2 focus:ring-gray-800 outline-none transition-colors"
-                                >
-                                    <option value="active">เปิดใช้งาน (Active)</option>
-                                    <option value="disabled">ระงับชั่วคราว (Disabled)</option>
-                                </select>
+                            <div className="mt-8 p-4 rounded-2xl bg-gray-900 text-white flex justify-between items-center">
+                                <div>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">สถานะปัจจุบัน</p>
+                                    <p className="text-lg font-black">{houseMembers.length} / {selectedHouse?.max_slots} ที่นั่ง</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">กำไรโดยประมาณ</p>
+                                    <p className="text-lg font-black text-green-400">
+                                        {(() => {
+                                            const product = Array.isArray(selectedHouse?.products) ? selectedHouse?.products[0] : (selectedHouse?.products as any);
+                                            const profit = (houseMembers.length * (product?.price || 0)) - (selectedHouse?.billing_cycle === 'yearly' ? (selectedHouse?.cost || 0) / 12 : (selectedHouse?.cost || 0));
+                                            return `฿${formatCurrency(profit)}`;
+                                        })()}
+                                    </p>
+                                </div>
                             </div>
-
-                            <div className="pt-4 flex gap-3">
-                                <button type="button" onClick={handleCloseModal} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors">ยกเลิก</button>
-                                <button type="submit" disabled={isProcessing || !formData.product_id} className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50">
-                                    {isProcessing ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
-                                </button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}
+
+            <InventoryModal
+                isOpen={isModalOpen}
+                isAnimating={isAnimating}
+                editId={editId}
+                formData={formData}
+                editDetails={editDetails}
+                products={products}
+                isProcessing={isProcessing}
+                onClose={handleCloseModal}
+                onSave={handleSave}
+                onFormChange={setFormData}
+                onDetailsChange={setEditDetails}
+            />
         </div>
+
     );
 }

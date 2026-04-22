@@ -40,3 +40,35 @@ export async function sendLineAdmin(message: string) {
     return false;
   }
 }
+
+export async function sendLineUser(lineUserId: string, message: string) {
+  const channelAccessToken = process.env.LINE_BOT_ACCESS_TOKEN;
+
+  if (!channelAccessToken || !lineUserId) {
+    return false;
+  }
+
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${channelAccessToken}`
+      },
+      body: JSON.stringify({
+        to: lineUserId,
+        messages: [
+          {
+            type: 'text',
+            text: message
+          }
+        ]
+      })
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to send LINE User message:", error);
+    return false;
+  }
+}
