@@ -14,6 +14,7 @@ import SubscriptionCard from '@/components/dashboard/SubscriptionCard';
 import DetailDrawer from '@/components/dashboard/DetailDrawer';
 import PaymentModal from '@/components/dashboard/PaymentModal';
 import StoreDrawer from '@/components/dashboard/StoreDrawer';
+import PushNotificationPrompt from '@/components/dashboard/PushNotificationPrompt';
 
 export default function Dashboard() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -168,6 +169,9 @@ export default function Dashboard() {
             <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded-md">Admin</span>
           )}
         </div>
+
+        {/* [NEW] แบนเนอร์เปิดแจ้งเตือน Web Push */}
+        <PushNotificationPrompt userId={userProfile.id} />
 
         {/* === ระบบ Tab Navigation === */}
         <div className="flex bg-gray-200/60 p-1 rounded-xl mb-6 shadow-inner">

@@ -8,6 +8,8 @@ import Link from 'next/link';
 import AdminSummaryCards from '@/components/admin/AdminSummaryCards';
 import ProfitAnalysis from '@/components/admin/ProfitAnalysis';
 import { calculateDaysLeft, formatCurrency } from '@/utils/subscriptionUtils';
+import { broadcastWebPush } from '@/lib/webPush';
+import Swal from 'sweetalert2';
 
 // Types สำหรับข้อมูลที่ดึงไว้ใน stats
 // หมายเหตุ: Supabase join คืน related rows เป็น array เสมอ
@@ -142,6 +144,36 @@ export default function AdminDashboardPage() {
 
 
 
+  const handleTestBroadcast = async () => {
+    const { value: message } = await Swal.fire({
+      title: 'ทดสอบส่ง Web Push 🚀',
+      input: 'text',
+      inputLabel: 'ข้อความที่ต้องการส่ง',
+      inputPlaceholder: 'เช่น ระบบกลับมาใช้งานได้ปกติแล้ว',
+      showCancelButton: true,
+      confirmButtonText: 'ส่งข้อความ (Broadcast)',
+      cancelButtonText: 'ยกเลิก',
+      inputValidator: (value) => {
+        if (!value) return 'กรุณาใส่ข้อความด้วยครับ!';
+      }
+    });
+
+    if (message) {
+      Swal.fire({ title: 'กำลังส่ง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      const result = await broadcastWebPush({
+        title: 'ประกาศจาก Admin 📢',
+        body: message,
+        url: '/dashboard'
+      });
+      
+      if (result.success && result.sentCount > 0) {
+        Swal.fire('ส่งสำเร็จ!', `กระจายข้อความไปยัง ${result.sentCount} อุปกรณ์เรียบร้อยแล้ว`, 'success');
+      } else {
+        Swal.fire('ไม่มีผู้รับ', 'ยังไม่มีลูกค้าเปิดรับการแจ้งเตือน', 'info');
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center min-h-[60vh]">
@@ -166,9 +198,19 @@ export default function AdminDashboardPage() {
           </h1>
           <p className="text-gray-500 mt-2">สรุปข้อมูลการดำเนินงาน และสิ่งที่ต้องจัดการวันนี้</p>
         </div>
-        <div className="text-right">
-            <p className="text-sm font-semibold text-gray-600">ข้อมูล ณ เดือนปัจจุบัน</p>
-            <p className="text-xs text-gray-400">{new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}</p>
+        <div className="flex flex-col items-end gap-2">
+            <div className="text-right">
+              <p className="text-sm font-semibold text-gray-600">ข้อมูล ณ เดือนปัจจุบัน</p>
+              <p className="text-xs text-gray-400">{new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}</p>
+            </div>
+            {/* [NEW] ปุ่มทดสอบ Broadcast Web Push */}
+            <button 
+              onClick={handleTestBroadcast}
+              className="mt-2 text-[10px] flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm font-bold"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+              ทดสอบส่ง Push ไปหาทุกคน
+            </button>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { Resend } from 'resend';
 import { ReminderEmail } from '@/components/emails/ReminderEmail';
 import { formatDate } from '@/utils/subscriptionUtils';
 import { sendLineUser } from '@/lib/lineNotify';
+import { sendWebPushToUser } from '@/lib/webPush';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -74,6 +75,15 @@ export async function GET(request: Request) {
             const lineMessage = `📢 แจ้งเตือนจาก Codary Sub!\n------------------\n🛍️ แพ็กเกจ: ${product.name}\n📅 จะหมดอายุในวันที่: ${formattedDate}\n💰 ยอดชำระ: ฿${product.price}\n------------------\nโปรดตรวจสอบข้อมูลในหน้า Dashboard เพื่อดำเนินการต่ออายุครับ 😊`;
             await sendLineUser(lineUserId, lineMessage);
             console.log(`✅ ส่ง LINE สำเร็จ -> ${userEmail}`);
+          }
+
+          // 3. ส่ง Web Push Notification
+          if (sub.user_id) {
+            await sendWebPushToUser(sub.user_id, {
+              title: `แพ็กเกจ ${product.name} ใกล้หมดอายุ ⏳`,
+              body: `แพ็กเกจของคุณจะหมดอายุในวันที่ ${formattedDate} โปรดต่ออายุเพื่อใช้งานอย่างต่อเนื่อง`
+            });
+            console.log(`✅ ส่ง Web Push สำเร็จ -> ${userEmail}`);
           }
 
           notificationsSent.push(userEmail);

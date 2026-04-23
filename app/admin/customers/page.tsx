@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
 import { sendLineAdmin, sendLineUser } from '@/lib/lineNotify';
+import { sendWebPushToUser } from '@/lib/webPush';
 
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -150,6 +151,13 @@ export default function AdminCustomersPage() {
           const lineMessage = `✅ ยืนยันการชำระเงินสำเร็จ\n\nระบบได้ดำเนินการอนุมัติและต่ออายุแพ็กเกจให้ท่านเรียบร้อยแล้วค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงิน: ${pendingPayment.amount} บาท\n📅 วันหมดอายุใหม่: ${formattedDate}\n\nหากมีข้อสงสัยเพิ่มเติม สามารถสอบถามแอดมินได้ตลอดนะคะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
           await sendLineUser(user.line_user_id, lineMessage).catch(e => console.error(e));
         }
+
+        if (user?.id) {
+          await sendWebPushToUser(user.id, {
+            title: 'ชำระเงินสำเร็จ! 🎉',
+            body: `แอดมินอนุมัติสลิปและต่ออายุแพ็กเกจให้คุณเรียบร้อยแล้ว`
+          });
+        }
       }
 
       handleCloseModal();
@@ -202,6 +210,13 @@ export default function AdminCustomersPage() {
           const productName = product?.name || 'แพ็กเกจของคุณ';
           const lineMessage = `❌ การชำระเงินไม่ผ่านการตรวจสอบ\n\nระบบไม่สามารถตรวจสอบยอดโอนของท่านได้ หรือพบความผิดปกติในสลิปที่แนบมาค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงินที่แจ้ง: ${pendingPayment.amount} บาท\n📝 เหตุผลจากแอดมิน: ${rejectReason}\n\nรบกวนตรวจสอบสลิปอีกครั้ง และทำรายการแจ้งโอนใหม่ผ่านหน้าเว็บไซต์ หรือติดต่อแอดมินเพื่อขอความช่วยเหลือนะคะ\n🙏 ขออภัยในความไม่สะดวกค่ะ`;
           await sendLineUser(user.line_user_id, lineMessage).catch(e => console.error(e));
+        }
+
+        if (user?.id) {
+          await sendWebPushToUser(user.id, {
+            title: 'สลิปไม่ผ่านการตรวจสอบ ❌',
+            body: `เหตุผล: ${rejectReason}`
+          });
         }
 
         Swal.fire({ icon: 'success', title: 'ปฏิเสธสลิปแล้ว', text: 'ระบบได้แจ้งให้ลูกค้าทราบเพื่อโอนเงินใหม่แล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });

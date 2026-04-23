@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
-import { sendLineUser } from '@/lib/lineNotify';
+import { sendLineAdmin, sendLineUser } from '@/lib/lineNotify';
+import { sendWebPushToUser } from '@/lib/webPush';
 
 interface Payment {
   id: string;
@@ -14,6 +15,7 @@ interface Payment {
   slip_url: string;
   method: string;
   created_at: string;
+  user_id: string;
   users: { display_name: string; email: string; line_user_id?: string };
   subscriptions: {
     id: string;
@@ -76,7 +78,7 @@ export default function AdminPaymentsPage() {
     const { data, error } = await supabase
       .from('payments')
       .select(`
-        id, amount, status, slip_url, method, created_at,
+        id, amount, status, slip_url, method, created_at, user_id,
         users ( display_name, email, line_user_id ),
         subscriptions!payments_subscription_id_fkey ( 
           id, end_date, billing_cycle,
@@ -142,6 +144,13 @@ export default function AdminPaymentsPage() {
 
         await sendLineUser(lineUserId, lineMessage);
       }
+      
+      if (paymentToApprove?.user_id) {
+        await sendWebPushToUser(paymentToApprove.user_id, {
+          title: 'ชำระเงินสำเร็จ! 🎉',
+          body: `แอดมินอนุมัติสลิปและต่ออายุแพ็กเกจให้คุณเรียบร้อยแล้ว`
+        });
+      }
 
       handleCloseModal();
 
@@ -202,6 +211,13 @@ export default function AdminPaymentsPage() {
         const lineMessage = `❌ การชำระเงินไม่ผ่านการตรวจสอบ\n\nระบบไม่สามารถตรวจสอบยอดโอนของท่านได้ หรือพบความผิดปกติในสลิปที่แนบมาค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงินที่แจ้ง: ${paymentToReject.amount} บาท\n\nรบกวนตรวจสอบสลิปอีกครั้ง และทำรายการแจ้งโอนใหม่ผ่านหน้าเว็บไซต์ หรือติดต่อแอดมินเพื่อขอความช่วยเหลือนนะคะ\n🙏 ขออภัยในความไม่สะดวกค่ะ`;
 
         await sendLineUser(lineUserId, lineMessage);
+      }
+
+      if (paymentToReject?.user_id) {
+        await sendWebPushToUser(paymentToReject.user_id, {
+          title: 'สลิปไม่ผ่านการตรวจสอบ ❌',
+          body: `สลิปของคุณไม่ผ่านการตรวจสอบ กรุณาติดต่อแอดมินหรือส่งสลิปใหม่`
+        });
       }
 
       handleCloseModal();

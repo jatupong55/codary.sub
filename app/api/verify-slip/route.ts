@@ -1,7 +1,8 @@
 // app/api/verify-slip/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendLineAdmin, sendLineUser } from '@/lib/lineNotify'
+import { sendLineAdmin, sendLineUser } from '@/lib/lineNotify';
+import { sendWebPushToUser } from '@/lib/webPush';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,6 +52,11 @@ export async function POST(request: Request) {
         const lineMessage = `⏳ ได้รับสลิปของคุณเรียบร้อยแล้ว\n\nระบบกำลังส่งข้อมูลให้แอดมินตรวจสอบค่ะ\n💳 ยอดเงินแจ้งโอน: ${expectedAmount} บาท\n\nการตรวจสอบอาจใช้เวลาสักครู่ ระบบจะส่งข้อความแจ้งเตือนอีกครั้งเมื่อดำเนินการเสร็จสิ้นค่ะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
         await sendLineUser(userData.line_user_id, lineMessage);
       }
+      
+      await sendWebPushToUser(userId, {
+        title: 'มีสลิปใหม่รอตรวจสอบ ⏳',
+        body: 'ระบบกำลังตรวจสอบสลิปของคุณ โปรดรอสักครู่...'
+      });
 
       // 2. ส่งกลับให้ Frontend แจ้งเตือนลูกค้า
       return NextResponse.json({
@@ -186,6 +192,11 @@ export async function POST(request: Request) {
       const lineMessage = `✅ ยืนยันการชำระเงินสำเร็จ\n\nระบบได้รับการยืนยันยอดเงินและต่ออายุแพ็กเกจให้ท่านเรียบร้อยแล้วค่ะ\n\n📦 บริการ: ${category || 'แพ็กเกจของคุณ'}\n💳 ยอดเงิน: ${expectedAmount} บาท\n📅 วันหมดอายุใหม่: ${formattedDate}\n\nหากมีข้อสงสัยเพิ่มเติม สามารถสอบถามแอดมินได้ตลอดนะคะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
       await sendLineUser(userData.line_user_id, lineMessage);
     }
+
+    await sendWebPushToUser(userId, {
+      title: 'ชำระเงินสำเร็จ! 🎉',
+      body: `ต่ออายุแพ็กเกจ ${category || 'ไม่ระบุ'} เรียบร้อยแล้ว ใช้งานได้จนถึง ${newEndDate.toLocaleDateString('th-TH')}`
+    });
 
     return NextResponse.json({
       success: true,
