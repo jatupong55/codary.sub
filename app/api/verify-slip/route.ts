@@ -1,7 +1,7 @@
 // app/api/verify-slip/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendLineAdmin } from '@/lib/lineNotify'
+import { sendLineAdmin, sendLineUser } from '@/lib/lineNotify'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,7 +38,19 @@ export async function POST(request: Request) {
 
       if (insertError) throw insertError;
 
-      await sendLineAdmin(`มีสลิปใหม่รอตรวจสอบ!\nยอดเงิน: ${expectedAmount} บาท\nรหัสลูกค้า: ${userId}`);
+      // ดึง email ลูกค้ามาโชว์ให้แอดมินดูง่ายๆ
+      const { data: userForAdmin } = await supabaseAdmin.from('users').select('email').eq('id', userId).single();
+      const userEmailStr = userForAdmin?.email || userId;
+
+      const adminManualMessage = `🚨 [Manual] มีสลิปใหม่รอตรวจสอบ\n\nลูกค้ายืนยันออเดอร์และอัปโหลดสลิปแล้ว\n\n👤 ลูกค้า: ${userEmailStr}\n💳 ยอดเงินแจ้งโอน: ${expectedAmount} บาท\n\nรบกวนแอดมินเข้าไปตรวจสอบความถูกต้อง และกดอนุมัติสลิปในระบบด้วยครับ`;
+      await sendLineAdmin(adminManualMessage);
+
+      // [NEW] แจ้งลูกค้าว่ากำลังรอตรวจสอบ
+      const { data: userData } = await supabaseAdmin.from('users').select('line_user_id').eq('id', userId).single();
+      if (userData?.line_user_id) {
+        const lineMessage = `⏳ ได้รับสลิปของคุณเรียบร้อยแล้ว\n\nระบบกำลังส่งข้อมูลให้แอดมินตรวจสอบค่ะ\n💳 ยอดเงินแจ้งโอน: ${expectedAmount} บาท\n\nการตรวจสอบอาจใช้เวลาสักครู่ ระบบจะส่งข้อความแจ้งเตือนอีกครั้งเมื่อดำเนินการเสร็จสิ้นค่ะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
+        await sendLineUser(userData.line_user_id, lineMessage);
+      }
 
       // 2. ส่งกลับให้ Frontend แจ้งเตือนลูกค้า
       return NextResponse.json({
@@ -110,15 +122,15 @@ export async function POST(request: Request) {
 
     // ดึงรอบบิลจากตาราง subscriptions โดยตรง
     const billingCycle = subData.billing_cycle || 'monthly';
-    
+
     let currentEndDate = new Date(subData.end_date);
     const today = new Date();
-    
+
     // ปรับให้ใช้ Logic มาตรฐานเดียวกันทุกแพ็กเกจ
     if (currentEndDate < today) {
       currentEndDate = new Date(today);
     }
-    
+
     let newEndDate = new Date(currentEndDate);
     let newNextBillingDate = details.nextBillingDate ? new Date(details.nextBillingDate) : new Date(currentEndDate);
 
@@ -160,7 +172,21 @@ export async function POST(request: Request) {
         slip_url: slipUrl
       });
 
-    await sendLineAdmin(`ชำระเงินอัตโนมัติสำเร็จ!\nรหัสลูกค้า: ${userId}\nแพ็กเกจ: ${category}\n รบกวนแอดมินเข้าไประบุบัญชีบ้าน (Master Account) ให้ลูกค้าด้วยค่ะ`);
+    // ดึง email ลูกค้ามาโชว์
+    const { data: userForAdmin } = await supabaseAdmin.from('users').select('email').eq('id', userId).single();
+    const userEmailStr = userForAdmin?.email || userId;
+
+    const adminAutoMessage = `✅ [SlipOK] ชำระเงินอัตโนมัติสำเร็จ!\n\nระบบตรวจสอบสลิปและต่ออายุแพ็กเกจให้ลูกค้าเรียบร้อยแล้ว\n\n👤 ลูกค้า: ${userEmailStr}\n📦 แพ็กเกจ: ${category || 'ไม่ระบุ'}\n💳 ยอดเงิน: ${expectedAmount} บาท\n\n📌 สิ่งที่ต้องทำ:\nรบกวนแอดมินเข้าไประบุบัญชีบ้าน (Master Account) ให้ลูกค้าในระบบด้วยครับ`;
+    await sendLineAdmin(adminAutoMessage);
+
+    // [NEW] แจ้งเตือนลูกค้าทันทีที่ SlipOK ตรวจผ่านและต่ออายุสำเร็จ
+    const { data: userData } = await supabaseAdmin.from('users').select('line_user_id').eq('id', userId).single();
+    if (userData?.line_user_id) {
+      const formattedDate = newEndDate.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+      const lineMessage = `✅ ยืนยันการชำระเงินสำเร็จ\n\nระบบได้รับการยืนยันยอดเงินและต่ออายุแพ็กเกจให้ท่านเรียบร้อยแล้วค่ะ\n\n📦 บริการ: ${category || 'แพ็กเกจของคุณ'}\n💳 ยอดเงิน: ${expectedAmount} บาท\n📅 วันหมดอายุใหม่: ${formattedDate}\n\nหากมีข้อสงสัยเพิ่มเติม สามารถสอบถามแอดมินได้ตลอดนะคะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
+      await sendLineUser(userData.line_user_id, lineMessage);
+    }
+
     return NextResponse.json({
       success: true,
       pendingAdmin: false,

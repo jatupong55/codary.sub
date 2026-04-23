@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
+import { sendLineUser } from '@/lib/lineNotify';
 
 interface Payment {
   id: string;
@@ -13,7 +14,7 @@ interface Payment {
   slip_url: string;
   method: string;
   created_at: string;
-  users: { display_name: string; email: string };
+  users: { display_name: string; email: string; line_user_id?: string };
   subscriptions: {
     id: string;
     end_date: string;
@@ -76,7 +77,7 @@ export default function AdminPaymentsPage() {
       .from('payments')
       .select(`
         id, amount, status, slip_url, method, created_at,
-        users ( display_name, email ),
+        users ( display_name, email, line_user_id ),
         subscriptions!payments_subscription_id_fkey ( 
           id, end_date, billing_cycle,
           products!subscriptions_product_id_fkey ( name, category, price ) 
@@ -90,7 +91,7 @@ export default function AdminPaymentsPage() {
     setIsLoading(false);
   };
 
-  // [UPDATE] ฟังก์ชันคำนวณวันหมดอายุใหม่ ให้รองรับรายเดือน/รายปี
+  // ฟังก์ชันคำนวณวันหมดอายุใหม่ ให้รองรับรายเดือน/รายปี
   const calculateNewEndDate = (currentEndDate: string, billingCycle: string) => {
     const isYearly = billingCycle === 'yearly';
     const daysToAdd = isYearly ? 365 : 30;
@@ -103,12 +104,12 @@ export default function AdminPaymentsPage() {
         baseDate = date;
       }
     }
-    
+
     baseDate.setDate(baseDate.getDate() + daysToAdd);
     return baseDate.toISOString();
   };
 
-  // [UPDATE] รับค่า billingCycle เข้ามาเพิ่ม
+  // รับค่า billingCycle เข้ามาเพิ่ม
   const handleApprove = async (paymentId: string, subId: string, currentEndDate: string, billingCycle: string) => {
     setIsProcessing(true);
     try {
@@ -130,8 +131,20 @@ export default function AdminPaymentsPage() {
 
       if (subError) throw subError;
 
+      // 3. ส่ง LINE แจ้งเตือนลูกค้า
+      const paymentToApprove = payments.find(p => p.id === paymentId);
+      const lineUserId = paymentToApprove?.users?.line_user_id;
+
+      if (lineUserId) {
+        const productName = paymentToApprove?.subscriptions?.products?.name || 'แพ็กเกจของคุณ';
+        const formattedDate = new Date(newEndDate).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+        const lineMessage = `✅ ยืนยันการชำระเงินสำเร็จ\n\nระบบได้ดำเนินการอนุมัติและต่ออายุแพ็กเกจให้ท่านเรียบร้อยแล้วค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงิน: ${paymentToApprove.amount} บาท\n📅 วันหมดอายุใหม่: ${formattedDate}\n\nหากมีข้อสงสัยเพิ่มเติม สามารถสอบถามแอดมินได้ตลอดนะคะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
+
+        await sendLineUser(lineUserId, lineMessage);
+      }
+
       handleCloseModal();
-      
+
       Swal.fire({
         icon: 'success',
         title: 'อนุมัติสำเร็จ!',
@@ -140,7 +153,7 @@ export default function AdminPaymentsPage() {
         customClass: { popup: 'rounded-2xl' }
       });
 
-      await fetchPayments(); 
+      await fetchPayments();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอนุมัติ';
       console.error('Approval error:', error);
@@ -162,14 +175,14 @@ export default function AdminPaymentsPage() {
       text: "คุณต้องการปฏิเสธและยกเลิกรายการนี้ใช่หรือไม่?",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#ef4444', 
-      cancelButtonColor: '#9ca3af',  
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#9ca3af',
       confirmButtonText: 'ใช่, ปฏิเสธรายการ',
       cancelButtonText: 'ยกเลิก',
       customClass: { popup: 'rounded-2xl' }
     });
 
-    if (!confirmResult.isConfirmed) return; 
+    if (!confirmResult.isConfirmed) return;
 
     setIsProcessing(true);
     try {
@@ -179,6 +192,17 @@ export default function AdminPaymentsPage() {
         .eq('id', paymentId);
 
       if (error) throw error;
+
+      // 2. ส่ง LINE แจ้งเตือนลูกค้า
+      const paymentToReject = payments.find(p => p.id === paymentId);
+      const lineUserId = paymentToReject?.users?.line_user_id;
+
+      if (lineUserId) {
+        const productName = paymentToReject?.subscriptions?.products?.name || 'แพ็กเกจของคุณ';
+        const lineMessage = `❌ การชำระเงินไม่ผ่านการตรวจสอบ\n\nระบบไม่สามารถตรวจสอบยอดโอนของท่านได้ หรือพบความผิดปกติในสลิปที่แนบมาค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงินที่แจ้ง: ${paymentToReject.amount} บาท\n\nรบกวนตรวจสอบสลิปอีกครั้ง และทำรายการแจ้งโอนใหม่ผ่านหน้าเว็บไซต์ หรือติดต่อแอดมินเพื่อขอความช่วยเหลือนนะคะ\n🙏 ขออภัยในความไม่สะดวกค่ะ`;
+
+        await sendLineUser(lineUserId, lineMessage);
+      }
 
       handleCloseModal();
 
@@ -190,7 +214,7 @@ export default function AdminPaymentsPage() {
         customClass: { popup: 'rounded-2xl' }
       });
 
-      await fetchPayments(); 
+      await fetchPayments();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการปฏิเสธสลิป';
       console.error('Rejection error:', error);
@@ -232,11 +256,10 @@ export default function AdminPaymentsPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab as 'รอตรวจสอบ' | 'สำเร็จ' | 'ยกเลิก' | 'ทั้งหมด')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              activeTab === tab
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab
                 ? 'bg-gray-800 text-white'
                 : 'text-gray-500 hover:bg-gray-100'
-            }`}
+              }`}
           >
             {tab}
             <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white/20">
@@ -264,9 +287,9 @@ export default function AdminPaymentsPage() {
               {filteredPayments.map((payment) => (
                 <tr key={payment.id} className="border-b border-gray-100/50 hover:bg-white/40 transition-colors">
                   <td className="px-6 py-4 text-gray-500">
-                    {new Date(payment.created_at).toLocaleString('th-TH', { 
-                      year: 'numeric', month: '2-digit', day: '2-digit', 
-                      hour: '2-digit', minute: '2-digit' 
+                    {new Date(payment.created_at).toLocaleString('th-TH', {
+                      year: 'numeric', month: '2-digit', day: '2-digit',
+                      hour: '2-digit', minute: '2-digit'
                     })}
                   </td>
                   <td className="px-6 py-4">
@@ -275,7 +298,7 @@ export default function AdminPaymentsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-gray-800 font-medium">{payment.subscriptions?.products?.name || 'N/A'}</div>
-                    {/* [NEW] แสดงรอบบิลในตาราง */}
+                    {/* แสดงรอบบิลในตาราง */}
                     {payment.subscriptions?.billing_cycle === 'yearly' ? (
                       <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">รายปี</span>
                     ) : (
@@ -286,11 +309,10 @@ export default function AdminPaymentsPage() {
                     ฿{Number(payment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-medium ${
-                      payment.status === 'สำเร็จ' ? 'bg-[#CCF0D4] text-green-800' :
-                      payment.status === 'รอตรวจสอบ' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-medium ${payment.status === 'สำเร็จ' ? 'bg-[#CCF0D4] text-green-800' :
+                        payment.status === 'รอตรวจสอบ' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                      }`}>
                       {payment.status}
                     </span>
                   </td>
@@ -320,13 +342,13 @@ export default function AdminPaymentsPage() {
       {isModalOpen && selectedPayment && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
           <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col md:flex-row overflow-hidden transform transition-all duration-300">
-            
+
             {/* Left: Slip Image */}
             <div className="md:w-1/2 bg-gray-100 p-4 flex items-center justify-center min-h-[300px] relative">
               {selectedPayment.slip_url ? (
-                <img 
-                  src={selectedPayment.slip_url} 
-                  alt="Payment Slip" 
+                <img
+                  src={selectedPayment.slip_url}
+                  alt="Payment Slip"
                   className="max-h-[500px] w-auto object-contain rounded-lg shadow-sm"
                 />
               ) : (
@@ -349,20 +371,20 @@ export default function AdminPaymentsPage() {
                   <p className="text-gray-800 font-medium">{selectedPayment.users?.display_name}</p>
                   <p className="text-xs text-gray-500">{selectedPayment.users?.email}</p>
                 </div>
-                
+
                 <div className="border-t border-gray-100 pt-3">
                   <label className="text-xs text-gray-500 uppercase font-semibold">แพ็กเกจที่ต้องการต่ออายุ</label>
                   <div className="flex items-center gap-2 mt-1">
                     <p className="text-gray-800 font-bold">{selectedPayment.subscriptions?.products?.name}</p>
-                    {/* [NEW] ป้ายบอกรายเดือน/รายปี */}
+                    {/* ป้ายบอกรายเดือน/รายปี */}
                     {selectedPayment.subscriptions?.billing_cycle === 'yearly' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
                     )}
                   </div>
-                  
-                  {/* [NEW] แสดงพรีวิวว่าถ้ากดอนุมัติ วันหมดอายุจะเป็นวันไหน */}
+
+                  {/* แสดงพรีวิวว่าถ้ากดอนุมัติ วันหมดอายุจะเป็นวันไหน */}
                   <div className="mt-2 text-xs bg-gray-50 p-2 rounded-lg border border-gray-100">
                     <p className="text-gray-500 mb-1">วันหมดอายุเดิม: {selectedPayment.subscriptions?.end_date ? new Date(selectedPayment.subscriptions.end_date).toLocaleDateString('th-TH') : '-'}</p>
                     {selectedPayment.status === 'รอตรวจสอบ' && (

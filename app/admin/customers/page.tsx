@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
-import { sendLineAdmin } from '@/lib/lineNotify';
+import { sendLineAdmin, sendLineUser } from '@/lib/lineNotify';
 
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -86,7 +86,7 @@ export default function AdminCustomersPage() {
         .from('subscriptions')
         .select(`
           id, end_date, status, master_account_id, details, billing_cycle,
-          users!subscriptions_user_id_fkey ( id, display_name, email ),
+          users!subscriptions_user_id_fkey ( id, display_name, email, line_user_id ),
           products!subscriptions_product_id_fkey ( id, name, category ),
           master_accounts!subscriptions_master_account_id_fkey ( id, email ),
           payments ( id, status, slip_url, amount )
@@ -139,6 +139,17 @@ export default function AdminCustomersPage() {
           .eq('id', pendingPayment.id);
 
         if (payError) throw payError;
+
+        // [NEW] แจ้งเตือนลูกค้าผ่าน LINE เมื่อสลิปถูกอนุมัติจากหน้านี้
+        const user = Array.isArray(selectedSub.users) ? selectedSub.users[0] : (selectedSub.users as any);
+        const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
+        
+        if (user?.line_user_id) {
+          const formattedDate = new Date(editEndDate).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+          const productName = product?.name || 'แพ็กเกจของคุณ';
+          const lineMessage = `✅ ยืนยันการชำระเงินสำเร็จ\n\nระบบได้ดำเนินการอนุมัติและต่ออายุแพ็กเกจให้ท่านเรียบร้อยแล้วค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงิน: ${pendingPayment.amount} บาท\n📅 วันหมดอายุใหม่: ${formattedDate}\n\nหากมีข้อสงสัยเพิ่มเติม สามารถสอบถามแอดมินได้ตลอดนะคะ\n🙏 ขอบคุณที่ไว้วางใจ Codary Sub ค่ะ`;
+          await sendLineUser(user.line_user_id, lineMessage).catch(e => console.error(e));
+        }
       }
 
       handleCloseModal();
@@ -181,6 +192,17 @@ export default function AdminCustomersPage() {
           .eq('id', paymentId);
 
         if (error) throw error;
+
+        // [NEW] แจ้งเตือนลูกค้าผ่าน LINE เมื่อสลิปถูกปฏิเสธจากหน้านี้
+        const user = Array.isArray(selectedSub?.users) ? selectedSub?.users[0] : (selectedSub?.users as any);
+        const product = Array.isArray(selectedSub?.products) ? selectedSub?.products[0] : (selectedSub?.products as any);
+        const pendingPayment = selectedSub?.payments?.find(p => p.id === paymentId);
+        
+        if (user?.line_user_id && pendingPayment) {
+          const productName = product?.name || 'แพ็กเกจของคุณ';
+          const lineMessage = `❌ การชำระเงินไม่ผ่านการตรวจสอบ\n\nระบบไม่สามารถตรวจสอบยอดโอนของท่านได้ หรือพบความผิดปกติในสลิปที่แนบมาค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงินที่แจ้ง: ${pendingPayment.amount} บาท\n📝 เหตุผลจากแอดมิน: ${rejectReason}\n\nรบกวนตรวจสอบสลิปอีกครั้ง และทำรายการแจ้งโอนใหม่ผ่านหน้าเว็บไซต์ หรือติดต่อแอดมินเพื่อขอความช่วยเหลือนะคะ\n🙏 ขออภัยในความไม่สะดวกค่ะ`;
+          await sendLineUser(user.line_user_id, lineMessage).catch(e => console.error(e));
+        }
 
         Swal.fire({ icon: 'success', title: 'ปฏิเสธสลิปแล้ว', text: 'ระบบได้แจ้งให้ลูกค้าทราบเพื่อโอนเงินใหม่แล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
         handleCloseModal();

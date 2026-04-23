@@ -89,7 +89,7 @@ export default function AdminDashboardPage() {
         
         // ชำระเงินล่าสุด
         supabase.from('payments')
-          .select('id, amount, status, created_at, users(display_name), subscriptions(products(name))')
+          .select('id, amount, status, created_at, users(display_name, email), subscriptions(products(name))')
           .order('created_at', { ascending: false })
           .limit(5),
 
@@ -201,27 +201,33 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <ul className="space-y-3">
-                {stats.pendingPayments.map(payment => (
-                  <li key={payment.id} className="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">{payment.users?.[0]?.display_name}</p>
-                      <p className="text-[11px] text-gray-500">{payment.subscriptions?.[0]?.products?.[0]?.name}</p>
-                    </div>
-                    <div className="text-right">
-                      {/* [UPDATE] Format เงิน */}
-                      <p className="text-sm font-bold text-orange-600">
-                        ฿{formatCurrency(Number(payment.amount))}
-                      </p>
-                      <p className="text-[10px] text-gray-400">{new Date(payment.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
-                    </div>
-                  </li>
-                ))}
+                {stats.pendingPayments.map((payment) => {
+                  const user = Array.isArray(payment.users) ? payment.users[0] : payment.users;
+                  const sub = Array.isArray(payment.subscriptions) ? payment.subscriptions[0] : payment.subscriptions;
+                  const product = Array.isArray(sub?.products) ? sub?.products[0] : sub?.products;
+                  
+                  return (
+                    <li key={payment.id} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+                      <div className="flex flex-col">
+                        <p className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">
+                          {user?.display_name || user?.email || 'ไม่ทราบชื่อ'}
+                        </p>
+                        <p className="text-[11px] text-gray-500">{product?.name || 'ไม่ระบุสินค้า'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black text-blue-600">฿{formatCurrency(payment.amount)}</p>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {new Date(payment.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
         </div>
 
-        {/* กล่องขวา: กำลังจะหมดอายุ */}
         <div className="bg-white/70 backdrop-blur-lg border border-red-200 rounded-2xl shadow-sm p-5 flex flex-col">
           <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -241,13 +247,18 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <ul className="space-y-3">
-                {stats.expiringSubs.map(sub => {
+                {stats.expiringSubs.map((sub) => {
+                  const user = Array.isArray(sub.users) ? sub.users[0] : sub.users;
+                  const product = Array.isArray(sub.products) ? sub.products[0] : sub.products;
                   const dLeft = calculateDaysLeft(sub.end_date);
+                  
                   return (
-                    <li key={sub.id} className="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
-                      <div>
-                        <p className="text-sm font-bold text-gray-800">{sub.users?.[0]?.display_name}</p>
-                        <p className="text-[11px] text-gray-500">{sub.products?.[0]?.name}</p>
+                    <li key={sub.id} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+                      <div className="flex flex-col">
+                        <p className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">
+                          {user?.display_name || user?.email || 'ไม่ทราบชื่อ'}
+                        </p>
+                        <p className="text-[11px] text-gray-500">{product?.name || 'ไม่ระบุสินค้า'}</p>
                       </div>
                       <div className="text-right">
                         <span className={`px-2 py-1 rounded text-[10px] font-bold ${dLeft <= 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
@@ -301,7 +312,9 @@ export default function AdminDashboardPage() {
                     {(() => {
                       const sub = Array.isArray(payment?.subscriptions) ? payment?.subscriptions[0] : payment?.subscriptions;
                       const product = Array.isArray(sub?.products) ? sub?.products[0] : sub?.products;
-                      return product?.name || 'N/A';
+                      // ลองเช็กอีกรอบถ้า product ยังว่าง (เผื่อโครงสร้างเป็น { name: '...' } เลย)
+                      const productName = product?.name || (sub as any)?.products?.name;
+                      return productName || 'N/A';
                     })()}
                   </td>
                   
