@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📦 Codary Sub (Subscription Management Platform)
 
-## Getting Started
+## 📌 วัตถุประสงค์ (Objective)
+**Codary Sub** คือแพลตฟอร์มบริหารจัดการแพ็กเกจสมาชิก (Subscription Management) สำหรับบริการดิจิทัล เช่น ระบบแชร์บ้าน Streaming หรือบริการรายเดือนต่างๆ แพลตฟอร์มนี้ถูกสร้างขึ้นเพื่อ **"ลดภาระและประหยัดเวลาของแอดมิน"** ในการจัดการข้อมูลลูกค้า, ตรวจสอบสลิปโอนเงิน, และการแจ้งเตือนต่ออายุแพ็กเกจ ด้วยการผสานระบบการทำงานแบบอัตโนมัติ (Automation) อย่างครบวงจร
 
-First, run the development server:
+## ✨ ฟีเจอร์หลัก (Features)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### 👥 สำหรับลูกค้า (User Experience)
+- **LINE Login (OAuth2):** ล็อกอินเข้าสู่ระบบได้ทันทีด้วยบัญชี LINE ไม่ต้องจำรหัสผ่าน หรืออีเมล
+- **User Dashboard:** จัดการแพ็กเกจของตัวเอง, ตรวจสอบวันหมดอายุ และดูประวัติการต่ออายุ
+- **PromptPay QR Code:** สร้าง QR Code โอนเงินพร้อมเพย์อัตโนมัติตามยอดที่กำหนด (รองรับระบบสุ่มเศษสตางค์)
+- **Omnichannel Notifications:** ลูกค้าไม่พลาดทุกการแจ้งเตือน ไม่ว่าจะเป็น LINE Push Message, อีเมล, หรือ Web Push Notifications (PWA Pop-up)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 🛡️ สำหรับแอดมิน (Admin & Backoffice)
+- **SlipOK Integration:** ระบบตรวจสอบสลิปอัตโนมัติด้วย AI ป้องกันสลิปปลอม สลิปซ้ำ และต่ออายุให้ลูกค้าแบบทันที (Auto-Renewal)
+- **Admin Bypass Mode:** สลับไปใช้โหมดตรวจสอบสลิปแบบ Manual ได้ทันที หากระบบ API ภายนอกมีปัญหา
+- **Inventory & Master Accounts:** จัดการ "บัญชีบ้าน" (Master Account), เช็คโควตาสมาชิก, และคำนวณกำไรสุทธิ (Margin %) ต่อบ้าน
+- **Financial Overview:** แดชบอร์ดสรุปยอดขายรายเดือน, ต้นทุน, และกำไร
+- **Broadcast Web Push:** ส่งข้อความ Push ประกาศข่าวสารหาลูกค้าทุกคนได้ในคลิกเดียวจากหน้า Admin
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🛠️ เทคโนโลยีที่ใช้ (Tech Stack)
+- **Frontend Framework:** Next.js 16 (App Router)
+- **Styling:** Tailwind CSS + UI Components (SweetAlert2, React Datepicker)
+- **Backend / Database:** Supabase (PostgreSQL, Row Level Security, Auth)
+- **PWA Support:** Serwist (สำหรับ Service Worker)
+- **External APIs:**
+  - LINE Login API & LINE Messaging API
+  - SlipOK API (ตรวจสอบสลิป)
+  - Resend API (สำหรับส่งอีเมล)
+- **Infrastructure:** Vercel (Hosting & Vercel Cron Jobs)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 วิธีการติดตั้ง (Installation Guide)
 
-## Learn More
+1. **Clone Repository:**
+   ```bash
+   git clone <your-repo-url>
+   cd codary-sub
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Install Dependencies:**
+   ```bash
+   npm install
+   # หรือ yarn install, pnpm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **ตั้งค่าฐานข้อมูล (Supabase):**
+   - ไปที่ [Supabase Dashboard](https://supabase.com) และสร้างโปรเจ็คใหม่
+   - ไปที่เมนู **SQL Editor**
+   - คัดลอกโค้ดทั้งหมดจากไฟล์ `database.sql` ที่อยู่ในโฟลเดอร์โปรเจ็ค ไปวางและกด **Run** เพื่อสร้างตารางทั้งหมดที่จำเป็น
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **รันเซิร์ฟเวอร์ในโหมด Development:**
+   ```bash
+   npm run dev
+   ```
+   *หมายเหตุ: หากต้องการทดสอบระบบ Web Push Notification และ PWA ในเครื่องตัวเอง ให้รัน `npm run build` ตามด้วย `npm run start` เพื่อจำลองสภาพแวดล้อม Production*
 
-## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

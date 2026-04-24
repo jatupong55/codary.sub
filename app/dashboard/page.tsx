@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import generatePayload from 'promptpay-qr';
 import { isSubExpired } from '@/utils/subscriptionUtils';
 import type { DashboardSubscription, UserProfile } from '@/types/dashboard';
+import { sendLineAdmin } from '@/lib/lineNotify';
+import Swal from 'sweetalert2';
 
 // Import Components ที่เราแยกไว้
 import Header from '@/components/dashboard/Header';
@@ -29,11 +31,11 @@ export default function Dashboard() {
   const [payAmount, setPayAmount] = useState(0);
   const [qrPayload, setQrPayload] = useState('');
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
-  
+
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [activeDetailSub, setActiveDetailSub] = useState<DashboardSubscription | null>(null);
 
-  const MY_PROMPTPAY_ID = "0873616215";
+  const MY_PROMPTPAY_ID = process.env.NEXT_PUBLIC_PROMPTPAY_ID || "";
 
   const fetchSubscriptions = useCallback(async (userId: string) => {
     const { data: subsData, error } = await supabase
@@ -87,7 +89,7 @@ export default function Dashboard() {
 
       if (dbUser?.role === 'admin') {
         router.replace('/admin');
-        return; 
+        return;
       }
 
       const fallbackAvatar = process.env.NEXT_PUBLIC_FALLBACK_AVATAR || '';
@@ -117,14 +119,28 @@ export default function Dashboard() {
   const handleOpenPayment = (sub: DashboardSubscription) => {
     // 1. ตรวจสอบว่ามี expectedPrice ใน details ไหม ถ้าไม่มีให้กลับไปใช้ราคาตั้งต้นของ product
     const basePrice = sub.details?.expectedPrice || sub.products?.[0]?.price || 0;
-    
+
     // 2. สุ่มเศษสตางค์ (ตามโค้ดเดิมของคุณลูกค้า)
     // const randomSatang = Math.floor(Math.random() * 99) + 1;
     // const finalPrice = basePrice + (randomSatang / 100);
     const finalPrice = basePrice;
-    
+
     setPayAmount(finalPrice);
     setSelectedSubId(sub.id);
+    if (!MY_PROMPTPAY_ID) {
+      Swal.fire({
+        icon: 'error',
+        title: 'ระบบยังไม่พร้อมรับชำระเงิน',
+        text: 'ยังไม่ได้ตั้งค่าบัญชีรับเงิน กรุณาแจ้งแอดมิน',
+        confirmButtonColor: '#ef4444',
+        customClass: { popup: 'rounded-2xl' }
+      });
+      
+      // ส่งแจ้งเตือนหาแอดมินทันที
+      sendLineAdmin(`⚠️ ระบบมีปัญหา: ลูกค้า ${userProfile?.display_name || 'ไม่ระบุชื่อ'} พยายามชำระเงิน แต่คุณยังไม่ได้ตั้งค่า NEXT_PUBLIC_PROMPTPAY_ID ในไฟล์ .env.local ครับ`);
+      
+      return; // หยุดการทำงาน ไม่เปิดหน้า QR Code
+    }
 
     const payload = generatePayload(MY_PROMPTPAY_ID, { amount: finalPrice });
     setQrPayload(payload);
@@ -160,7 +176,7 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-gray-50 p-4 pb-20 relative">
       <div className="max-w-md mx-auto mt-6">
-        
+
         <Header userProfile={userProfile} onLogout={handleLogout} />
 
         <div className="mb-5 flex items-center justify-between">
@@ -177,17 +193,15 @@ export default function Dashboard() {
         <div className="flex bg-gray-200/60 p-1 rounded-xl mb-6 shadow-inner">
           <button
             onClick={() => setActiveTab('current')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
-              activeTab === 'current' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
-            }`}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'current' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
+              }`}
           >
             แพ็กเกจปัจจุบัน {currentSubs.length > 0 && `(${currentSubs.length})`}
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${
-              activeTab === 'history' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
-            }`}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'history' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
+              }`}
           >
             ประวัติ & ยกเลิก {historySubs.length > 0 && `(${historySubs.length})`}
           </button>
@@ -198,22 +212,22 @@ export default function Dashboard() {
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
               {activeTab === 'current' ? 'Current Plan' : 'History Plan'}
             </h3>
-            
+
             {/* แสดงปุ่มสโตร์เฉพาะในหน้าแพ็กเกจปัจจุบัน */}
             {activeTab === 'current' && (
-              <StoreDrawer 
+              <StoreDrawer
                 subscriptions={subscriptions}
                 onRefresh={() => fetchSubscriptions(userProfile.id)}
-                
+
                 // [NEW] โค้ดรับสัญญาณ และสร้าง Mock Data หลอกระบบให้เปิด Modal โอนเงิน
                 onCheckoutSuccess={(price, subId) => {
-                  const mockSubData: DashboardSubscription = { 
-                    id: subId, 
+                  const mockSubData: DashboardSubscription = {
+                    id: subId,
                     start_date: new Date().toISOString(),
                     end_date: new Date().toISOString(),
                     status: 'pending',
                     billing_cycle: 'monthly',
-                    details: { expectedPrice: price } 
+                    details: { expectedPrice: price }
                   };
                   handleOpenPayment(mockSubData);
                 }}
@@ -225,35 +239,35 @@ export default function Dashboard() {
           {displaySubs.length === 0 ? (
             <div className="bg-transparent border border-dashed border-gray-300 p-8 rounded-[2rem] flex flex-col items-center justify-center text-center">
               <p className="text-gray-400 text-sm font-medium">
-                {activeTab === 'current' 
-                  ? 'ยังไม่มีแพ็กเกจที่ใช้งานในขณะนี้' 
+                {activeTab === 'current'
+                  ? 'ยังไม่มีแพ็กเกจที่ใช้งานในขณะนี้'
                   : 'ยังไม่มีประวัติการใช้งานหรือยกเลิกแพ็กเกจ'
                 }
               </p>
             </div>
           ) : (
             displaySubs.map((sub) => (
-              <SubscriptionCard 
-                key={sub.id} 
-                sub={sub} 
-                onOpenDetail={handleOpenDetail} 
-                onOpenPayment={handleOpenPayment} 
+              <SubscriptionCard
+                key={sub.id}
+                sub={sub}
+                onOpenDetail={handleOpenDetail}
+                onOpenPayment={handleOpenPayment}
               />
             ))
           )}
         </section>
       </div>
-      
+
       {activeDetailSub && (
-        <DetailDrawer 
-          isOpen={isDetailOpen} 
-          onClose={handleCloseDetail} 
-          sub={activeDetailSub} 
-          userProfile={userProfile} 
+        <DetailDrawer
+          isOpen={isDetailOpen}
+          onClose={handleCloseDetail}
+          sub={activeDetailSub}
+          userProfile={userProfile}
         />
       )}
 
-      <PaymentModal 
+      <PaymentModal
         isMounted={isModalMounted}
         isVisible={isModalVisible}
         onClose={handleClosePayment}
