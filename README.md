@@ -29,6 +29,15 @@
   - Resend API (สำหรับส่งอีเมล)
 - **Infrastructure:** Vercel (Hosting & Vercel Cron Jobs)
 
+## 📋 สิ่งที่ต้องเตรียมพร้อม (Prerequisites)
+ก่อนเริ่มติดตั้งโปรเจ็ค กรุณาตรวจสอบให้แน่ใจว่าคุณมีสิ่งเหล่านี้:
+- **Node.js** (เวอร์ชัน 18.17 ขึ้นไป)
+- **Git**
+- **Supabase Account** (สำหรับตั้งค่าฐานข้อมูลฟรี)
+- **LINE Developers Account** (สำหรับสร้าง Channel แบบ LINE Login และ Messaging API)
+- **SlipOK Account** (หากต้องการใช้ระบบตรวจสอบสลิปอัตโนมัติ)
+- **Resend Account** (หากต้องการเปิดใช้ระบบส่งอีเมล)
+
 ## 🚀 วิธีการติดตั้ง (Installation Guide)
 
 1. **Clone Repository:**
@@ -43,12 +52,19 @@
    # หรือ yarn install, pnpm install
    ```
 
-3. **ตั้งค่าฐานข้อมูล (Supabase):**
+3. **ตั้งค่า Environment Variables:**
+   - คัดลอกไฟล์ `.env.example` (หรือสร้างไฟล์ใหม่ชื่อ `.env.local`)
+   - กรอกข้อมูล API Keys ของคุณลงไปให้ครบถ้วน (เช่น Supabase, LINE, SlipOK, Resend, VAPID)
+   ```bash
+   cp .env.example .env.local
+   ```
+
+4. **ตั้งค่าฐานข้อมูล (Supabase):**
    - ไปที่ [Supabase Dashboard](https://supabase.com) และสร้างโปรเจ็คใหม่
    - ไปที่เมนู **SQL Editor**
    - คัดลอกโค้ดทั้งหมดจากไฟล์ `database.sql` ที่อยู่ในโฟลเดอร์โปรเจ็ค ไปวางและกด **Run** เพื่อสร้างตารางทั้งหมดที่จำเป็น
 
-4. **รันเซิร์ฟเวอร์ในโหมด Development:**
+5. **รันเซิร์ฟเวอร์ในโหมด Development:**
    ```bash
    npm run dev
    ```
