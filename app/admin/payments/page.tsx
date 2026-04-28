@@ -357,87 +357,91 @@ export default function AdminPaymentsPage() {
       {/* Slip Approval Modal */}
       {isModalOpen && selectedPayment && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
-          <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col md:flex-row overflow-hidden transform transition-all duration-300">
+          <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col transform transition-all duration-300 overflow-hidden">
+            
+            {/* --- Body: Scrollable Area --- */}
+            <div className="flex-1 overflow-y-auto flex flex-col md:flex-row">
+              {/* Left: Slip Image */}
+              <div className="md:w-1/2 bg-gray-100 p-4 flex items-center justify-center min-h-[300px] relative border-b md:border-b-0 md:border-r border-gray-200">
+                {selectedPayment.slip_url ? (
+                  <img
+                    src={selectedPayment.slip_url}
+                    alt="Payment Slip"
+                    className="max-h-[60vh] md:max-h-[500px] w-auto object-contain rounded-lg shadow-sm"
+                  />
+                ) : (
+                  <p className="text-gray-400">ไม่มีรูปสลิป</p>
+                )}
+              </div>
 
-            {/* Left: Slip Image */}
-            <div className="md:w-1/2 bg-gray-100 p-4 flex items-center justify-center min-h-[300px] relative">
-              {selectedPayment.slip_url ? (
-                <img
-                  src={selectedPayment.slip_url}
-                  alt="Payment Slip"
-                  className="max-h-[500px] w-auto object-contain rounded-lg shadow-sm"
-                />
-              ) : (
-                <p className="text-gray-400">ไม่มีรูปสลิป</p>
-              )}
+              {/* Right: Details Area */}
+              <div className="md:w-1/2 p-6 flex flex-col">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">ตรวจสอบการชำระเงิน</h3>
+                  <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase font-semibold">ลูกค้า</label>
+                    <p className="text-gray-800 font-medium">{selectedPayment.users?.display_name}</p>
+                    <p className="text-xs text-gray-500">{selectedPayment.users?.email}</p>
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-3">
+                    <label className="text-xs text-gray-500 uppercase font-semibold">แพ็กเกจที่ต้องการต่ออายุ</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-gray-800 font-bold">{selectedPayment.subscriptions?.products?.name}</p>
+                      {selectedPayment.subscriptions?.billing_cycle === 'yearly' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
+                      )}
+                    </div>
+
+                    <div className="mt-2 text-xs bg-gray-50 p-2 rounded-lg border border-gray-100">
+                      <p className="text-gray-500 mb-1">วันหมดอายุเดิม: {selectedPayment.subscriptions?.end_date ? new Date(selectedPayment.subscriptions.end_date).toLocaleDateString('th-TH') : '-'}</p>
+                      {selectedPayment.status === 'รอตรวจสอบ' && (
+                        <p className="font-bold text-green-600">
+                          ➔ ต่ออายุถึง: {new Date(calculateNewEndDate(selectedPayment.subscriptions?.end_date, selectedPayment.subscriptions?.billing_cycle)).toLocaleDateString('th-TH')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[#BCE2E8]/20 rounded-xl border border-[#BCE2E8]/50 mt-2">
+                    <label className="text-xs text-gray-500 uppercase font-semibold">ยอดเงินที่โอน</label>
+                    <p className="text-2xl font-black text-[#00C300] tracking-tight">
+                      ฿{Number(selectedPayment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Right: Details & Actions */}
-            <div className="md:w-1/2 p-6 flex flex-col">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-bold text-gray-800">ตรวจสอบการชำระเงิน</h3>
-                <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 transition-colors">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
-
-              <div className="space-y-4 flex-1">
-                <div>
-                  <label className="text-xs text-gray-500 uppercase font-semibold">ลูกค้า</label>
-                  <p className="text-gray-800 font-medium">{selectedPayment.users?.display_name}</p>
-                  <p className="text-xs text-gray-500">{selectedPayment.users?.email}</p>
-                </div>
-
-                <div className="border-t border-gray-100 pt-3">
-                  <label className="text-xs text-gray-500 uppercase font-semibold">แพ็กเกจที่ต้องการต่ออายุ</label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-gray-800 font-bold">{selectedPayment.subscriptions?.products?.name}</p>
-                    {/* ป้ายบอกรายเดือน/รายปี */}
-                    {selectedPayment.subscriptions?.billing_cycle === 'yearly' ? (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
-                    )}
-                  </div>
-
-                  {/* แสดงพรีวิวว่าถ้ากดอนุมัติ วันหมดอายุจะเป็นวันไหน */}
-                  <div className="mt-2 text-xs bg-gray-50 p-2 rounded-lg border border-gray-100">
-                    <p className="text-gray-500 mb-1">วันหมดอายุเดิม: {selectedPayment.subscriptions?.end_date ? new Date(selectedPayment.subscriptions.end_date).toLocaleDateString('th-TH') : '-'}</p>
-                    {selectedPayment.status === 'รอตรวจสอบ' && (
-                      <p className="font-bold text-green-600">
-                        ➔ ต่ออายุถึง: {new Date(calculateNewEndDate(selectedPayment.subscriptions?.end_date, selectedPayment.subscriptions?.billing_cycle)).toLocaleDateString('th-TH')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="p-4 bg-[#BCE2E8]/20 rounded-xl border border-[#BCE2E8]/50 mt-2">
-                  <label className="text-xs text-gray-500 uppercase font-semibold">ยอดเงินที่โอน</label>
-                  <p className="text-2xl font-black text-[#00C300] tracking-tight">
-                    ฿{Number(selectedPayment.amount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                </div>
-              </div>
-
-              {selectedPayment.status === 'รอตรวจสอบ' && (
-                <div className="mt-6 flex gap-3">
+            {/* --- Footer: Sticky Actions Area --- */}
+            {selectedPayment.status === 'รอตรวจสอบ' && (
+              <div className="p-4 md:p-6 border-t border-gray-100 bg-white/80 backdrop-blur-md sticky bottom-0 w-full">
+                <div className="flex gap-3">
                   <button
                     onClick={() => handleReject(selectedPayment.id)}
                     disabled={isProcessing}
-                    className="flex-1 py-2.5 bg-white border border-red-200 text-red-600 font-medium rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+                    className="flex-1 py-3 bg-white border border-red-200 text-red-600 font-bold rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50 shadow-sm"
                   >
                     ปฏิเสธรายการ
                   </button>
                   <button
                     onClick={() => handleApprove(selectedPayment.id, selectedPayment.subscriptions.id, selectedPayment.subscriptions.end_date, selectedPayment.subscriptions.billing_cycle)}
                     disabled={isProcessing}
-                    className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50"
+                    className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 shadow-sm shadow-gray-200"
                   >
-                    {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
+                    {isProcessing ? 'กำลังดำเนินการ...' : 'อนุมัติสลิปนี้'}
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
