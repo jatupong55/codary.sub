@@ -14,10 +14,10 @@ export default function Home() {
   const isTestMode = process.env.NEXT_PUBLIC_ENABLE_TEST_LOGIN === 'true';
 
   useEffect(() => {
-    const checkExistingLogin = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
+    let mounted = true;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session && mounted) {
         const { data: profile } = await supabase
           .from('users')
           .select('role')
@@ -30,8 +30,12 @@ export default function Home() {
           router.push('/dashboard');
         }
       }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
     };
-    checkExistingLogin();
   }, [router]);
 
   // ฟังก์ชันกดปุ่ม Login ด้วย Google (ของจริง)

@@ -74,10 +74,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    let mounted = true;
+
+    const loadData = async (session: any) => {
       if (!session) {
-        router.push('/');
+        if (mounted) router.push('/');
         return;
       }
 
@@ -88,26 +89,36 @@ export default function Dashboard() {
         .single();
 
       if (dbUser?.role === 'admin') {
-        router.replace('/admin');
+        if (mounted) router.replace('/admin');
         return;
       }
 
       const fallbackAvatar = process.env.NEXT_PUBLIC_FALLBACK_AVATAR || '';
 
-      setUserProfile({
-        id: session.user.id,
-        email: session.user.email || '',
-        avatar_url: session.user.user_metadata?.avatar_url || fallbackAvatar,
-        display_name: dbUser?.display_name || session.user.user_metadata?.name || 'User',
-        role: dbUser?.role || 'user',
-        line_user_id: dbUser?.line_user_id
-      });
+      if (mounted) {
+        setUserProfile({
+          id: session.user.id,
+          email: session.user.email || '',
+          avatar_url: session.user.user_metadata?.avatar_url || fallbackAvatar,
+          display_name: dbUser?.display_name || session.user.user_metadata?.name || 'User',
+          role: dbUser?.role || 'user',
+          line_user_id: dbUser?.line_user_id
+        });
 
-      await fetchSubscriptions(session.user.id);
-      setIsLoading(false);
+        await fetchSubscriptions(session.user.id);
+        setIsLoading(false);
+      }
     };
 
-    fetchInitialData();
+    // สมัครรับ Event การเปลี่ยนแปลงของ Session ตลอดเวลา (รวมถึงตอนเพิ่งเปิดแอป)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadData(session);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [router, fetchSubscriptions]);
 
   const handleLogout = async () => {
