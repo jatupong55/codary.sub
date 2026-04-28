@@ -18,37 +18,63 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true;
-    setIsMounted(true); // ให้รู้ว่า Hydrate เสร็จแล้ว
+    setIsMounted(true);
 
-    // เช็ค Session แบบด่วน ถ้าไม่มีให้เปิดหน้า Login ทันที
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session && mounted) {
+    // Safety Timeout: ถ้าผ่านไป 5 วินาทีแล้วยังเช็คไม่เสร็จ ให้ปลดล็อคหน้าจอโหลดเพื่อความปลอดภัย
+    const safetyTimer = setTimeout(() => {
+      if (mounted) {
         setIsCheckingSession(false);
       }
-    });
+    }, 5000);
+
+    const checkInitialSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session && mounted) {
+          setIsCheckingSession(false);
+          clearTimeout(safetyTimer);
+        }
+      } catch (error) {
+        if (mounted) setIsCheckingSession(false);
+        clearTimeout(safetyTimer);
+      }
+    };
+
+    checkInitialSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session && mounted) {
-        setIsCheckingSession(true); // ระหว่างรอ Redirect ให้ขึ้นหน้าโหลด
+      try {
+        if (session && mounted) {
+          setIsCheckingSession(true); 
+          
+          const { data: profile } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
 
-        const { data: profile } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile?.role === 'admin') {
-          router.push('/admin');
-        } else {
-          router.push('/dashboard');
+          if (profile?.role === 'admin') {
+            router.push('/admin');
+          } else {
+            router.push('/dashboard');
+          }
+          clearTimeout(safetyTimer);
+        } else if (!session && mounted) {
+          setIsCheckingSession(false);
+          clearTimeout(safetyTimer);
         }
-      } else if (!session && mounted) {
-        setIsCheckingSession(false);
+      } catch (error) {
+        console.error('Auth check error:', error);
+        if (mounted) {
+          setIsCheckingSession(false);
+          clearTimeout(safetyTimer);
+        }
       }
     });
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, [router]);
