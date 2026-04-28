@@ -20,55 +20,59 @@ export default function Home() {
     let mounted = true;
     setIsMounted(true);
 
-    // Safety Timeout: ถ้าผ่านไป 5 วินาทีแล้วยังเช็คไม่เสร็จ ให้ปลดล็อคหน้าจอโหลดเพื่อความปลอดภัย
+    // 1. ระบบ Fail-safe: ถ้าผ่านไป 3 วินาทีแล้วยังเช็คไม่เสร็จ ให้ปลด Loading ออก (เผื่อกรณี Error รุนแรง)
     const safetyTimer = setTimeout(() => {
       if (mounted) {
         setIsCheckingSession(false);
       }
-    }, 5000);
+    }, 3000);
 
-    const checkInitialSession = async () => {
+    const checkAuth = async () => {
       try {
+        // ดึง Session ปัจจุบัน
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session && mounted) {
-          setIsCheckingSession(false);
-          clearTimeout(safetyTimer);
+        
+        if (!mounted) return;
+
+        if (session) {
+          window.location.replace('/dashboard');
+          return;
         }
-      } catch (error) {
-        if (mounted) setIsCheckingSession(false);
-        clearTimeout(safetyTimer);
-      }
-    };
 
-    checkInitialSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (session && mounted) {
-          setIsCheckingSession(true); 
-          
-          const { data: profile } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (profile?.role === 'admin') {
-            router.push('/admin');
-          } else {
-            router.push('/dashboard');
+        // Fallback: ถ้า getSession เป็น null แต่ตรวจเจอว่ามี Token ค้างอยู่ในเครื่อง
+        // ให้ลองใช้ getUser() เพื่อบังคับให้ Supabase ตรวจสอบความถูกต้องของ Token อีกครั้ง (เผื่อกรณี Token หมดอายุแต่ Refresh ได้)
+        const hasLocalToken = Object.keys(localStorage).some(key => key.includes('auth-token'));
+        if (hasLocalToken) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && mounted) {
+            window.location.replace('/dashboard');
+            return;
           }
-          clearTimeout(safetyTimer);
-        } else if (!session && mounted) {
-          setIsCheckingSession(false);
-          clearTimeout(safetyTimer);
         }
-      } catch (error) {
-        console.error('Auth check error:', error);
+
+        // หากไม่มีทั้ง Session และ User จริงๆ ถึงจะยอมให้เข้าหน้า Login
+        setIsCheckingSession(false);
+        clearTimeout(safetyTimer);
+      } catch (err) {
+        console.error("Auth check error:", err);
         if (mounted) {
           setIsCheckingSession(false);
           clearTimeout(safetyTimer);
         }
+      }
+    };
+
+    checkAuth();
+
+    // 2. ติดตามเหตุการณ์การล็อกอิน (เช่น SIGNED_IN)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        window.location.replace('/dashboard');
+      } else if (event === 'SIGNED_OUT') {
+        setIsCheckingSession(false);
+        clearTimeout(safetyTimer);
       }
     });
 
@@ -77,7 +81,7 @@ export default function Home() {
       clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
 
   // ฟังก์ชันกดปุ่ม Login ด้วย Google (ของจริง)
   const handleGoogleLogin = async () => {

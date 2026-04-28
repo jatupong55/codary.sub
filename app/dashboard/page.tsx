@@ -77,15 +77,23 @@ export default function Dashboard() {
     let mounted = true;
 
     const loadData = async (session: any) => {
-      if (!session) {
-        if (mounted) router.push('/');
+      let currentSession = session;
+
+      // ถ้า session เป็น null ให้ลองเช็คซ้ำอีกรอบเผื่อเป็นกรณี Race Condition ตอนโหลดหน้า
+      if (!currentSession) {
+        const { data } = await supabase.auth.getSession();
+        currentSession = data.session;
+      }
+
+      if (!currentSession) {
+        if (mounted) router.replace('/');
         return;
       }
 
       const { data: dbUser } = await supabase
         .from('users')
         .select('*, line_user_id')
-        .eq('id', session.user.id)
+        .eq('id', currentSession.user.id)
         .single();
 
       if (dbUser?.role === 'admin') {
@@ -97,15 +105,15 @@ export default function Dashboard() {
 
       if (mounted) {
         setUserProfile({
-          id: session.user.id,
-          email: session.user.email || '',
-          avatar_url: session.user.user_metadata?.avatar_url || fallbackAvatar,
-          display_name: dbUser?.display_name || session.user.user_metadata?.name || 'User',
+          id: currentSession.user.id,
+          email: currentSession.user.email || '',
+          avatar_url: currentSession.user.user_metadata?.avatar_url || fallbackAvatar,
+          display_name: dbUser?.display_name || currentSession.user.user_metadata?.name || 'User',
           role: dbUser?.role || 'user',
           line_user_id: dbUser?.line_user_id
         });
 
-        await fetchSubscriptions(session.user.id);
+        await fetchSubscriptions(currentSession.user.id);
         setIsLoading(false);
       }
     };
