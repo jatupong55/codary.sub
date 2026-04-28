@@ -9,6 +9,7 @@ import { isSubExpired } from '@/utils/subscriptionUtils';
 import type { DashboardSubscription, UserProfile } from '@/types/dashboard';
 import { sendLineAdmin } from '@/lib/lineNotify';
 import Swal from 'sweetalert2';
+import SplashOverlay from '@/components/common/SplashOverlay';
 
 // Import Components ที่เราแยกไว้
 import Header from '@/components/dashboard/Header';
@@ -31,6 +32,9 @@ export default function Dashboard() {
   const [payAmount, setPayAmount] = useState(0);
   const [qrPayload, setQrPayload] = useState('');
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+
+  const [isSplashActive, setIsSplashActive] = useState(true);
+  const [isFadingOut, setIsFadingOut] = useState(false);
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [activeDetailSub, setActiveDetailSub] = useState<DashboardSubscription | null>(null);
@@ -79,7 +83,6 @@ export default function Dashboard() {
     const loadData = async (session: any) => {
       let currentSession = session;
 
-      // ถ้า session เป็น null ให้ลองเช็คซ้ำอีกรอบเผื่อเป็นกรณี Race Condition ตอนโหลดหน้า
       if (!currentSession) {
         const { data } = await supabase.auth.getSession();
         currentSession = data.session;
@@ -118,7 +121,14 @@ export default function Dashboard() {
       }
     };
 
-    // สมัครรับ Event การเปลี่ยนแปลงของ Session ตลอดเวลา (รวมถึงตอนเพิ่งเปิดแอป)
+    if (!isLoading && userProfile && isSplashActive) {
+      setIsFadingOut(true);
+      const timer = setTimeout(() => {
+        setIsSplashActive(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       loadData(session);
     });
@@ -127,7 +137,7 @@ export default function Dashboard() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [router, fetchSubscriptions]);
+  }, [router, fetchSubscriptions, isLoading, userProfile, isSplashActive]);
 
   const handleLogout = async () => {
     Swal.fire({
@@ -142,18 +152,13 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  // เปลี่ยนจากรับ basePrice เป็นรับ sub (ข้อมูลแพ็กเกจ) ทั้งก้อน
   const handleOpenPayment = (sub: DashboardSubscription) => {
-    // 1. ตรวจสอบว่ามี expectedPrice ใน details ไหม ถ้าไม่มีให้กลับไปใช้ราคาตั้งต้นของ product
     const basePrice = sub.details?.expectedPrice || sub.products?.[0]?.price || 0;
-
-    // 2. สุ่มเศษสตางค์ (ตามโค้ดเดิมของคุณลูกค้า)
-    // const randomSatang = Math.floor(Math.random() * 99) + 1;
-    // const finalPrice = basePrice + (randomSatang / 100);
     const finalPrice = basePrice;
 
     setPayAmount(finalPrice);
     setSelectedSubId(sub.id);
+
     if (!MY_PROMPTPAY_ID) {
       Swal.fire({
         icon: 'error',
@@ -163,10 +168,8 @@ export default function Dashboard() {
         customClass: { popup: 'rounded-2xl' }
       });
       
-      // ส่งแจ้งเตือนหาแอดมินทันที
       sendLineAdmin(`⚠️ ระบบมีปัญหา: ลูกค้า ${userProfile?.display_name || 'ไม่ระบุชื่อ'} พยายามชำระเงิน แต่คุณยังไม่ได้ตั้งค่า NEXT_PUBLIC_PROMPTPAY_ID ในไฟล์ .env.local ครับ`);
-      
-      return; // หยุดการทำงาน ไม่เปิดหน้า QR Code
+      return;
     }
 
     const payload = generatePayload(MY_PROMPTPAY_ID, { amount: finalPrice });
@@ -181,130 +184,110 @@ export default function Dashboard() {
     setTimeout(() => setIsModalMounted(false), 300);
   };
 
-  // === ฟังก์ชันเช็กว่าหมดอายุแล้วหรือยัง (ให้ตรงกับ Logic ใน Card) ===
-
-
-  // === กรองข้อมูลแยกตาม Tab ===
   const currentSubs = subscriptions.filter(sub => sub.status !== 'cancelled' && !isSubExpired(sub));
   const historySubs = subscriptions.filter(sub => sub.status === 'cancelled' || isSubExpired(sub));
-
   const displaySubs = activeTab === 'current' ? currentSubs : historySubs;
-
-  if (isLoading || !userProfile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-pulse flex flex-col items-center transition-opacity duration-500">
-          <div className="w-12 h-12 border-4 border-[#00C300] border-t-transparent rounded-full animate-spin mb-4"></div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 pb-20 relative">
-      <div className="max-w-md mx-auto mt-6">
+      <SplashOverlay 
+        isVisible={isSplashActive} 
+        isFadingOut={isFadingOut} 
+        message="กำลังเตรียม Dashboard ของคุณ..." 
+      />
 
-        <Header userProfile={userProfile} onLogout={handleLogout} />
+      {userProfile && (
+        <div className="max-w-md mx-auto mt-6">
+          <Header userProfile={userProfile} onLogout={handleLogout} />
 
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-800">สวัสดีคุณ, {userProfile.display_name}</h2>
-          {userProfile.role === 'admin' && (
-            <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded-md">Admin</span>
-          )}
-        </div>
-
-        {/* [NEW] แบนเนอร์เปิดแจ้งเตือน Web Push */}
-        <PushNotificationPrompt userId={userProfile.id} />
-
-        {/* === ระบบ Tab Navigation === */}
-        <div className="flex bg-gray-200/60 p-1 rounded-xl mb-6 shadow-inner">
-          <button
-            onClick={() => setActiveTab('current')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'current' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
-              }`}
-          >
-            แพ็กเกจปัจจุบัน {currentSubs.length > 0 && `(${currentSubs.length})`}
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'history' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'
-              }`}
-          >
-            ประวัติ & ยกเลิก {historySubs.length > 0 && `(${historySubs.length})`}
-          </button>
-        </div>
-
-        <section className="space-y-5">
-          <div className="flex items-center justify-between ml-2 mb-4">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-              {activeTab === 'current' ? 'Current Plan' : 'History Plan'}
-            </h3>
-
-            {/* แสดงปุ่มสโตร์เฉพาะในหน้าแพ็กเกจปัจจุบัน */}
-            {activeTab === 'current' && (
-              <StoreDrawer
-                subscriptions={subscriptions}
-                onRefresh={() => fetchSubscriptions(userProfile.id)}
-
-                // [NEW] โค้ดรับสัญญาณ และสร้าง Mock Data หลอกระบบให้เปิด Modal โอนเงิน
-                onCheckoutSuccess={(price, subId) => {
-                  const mockSubData: DashboardSubscription = {
-                    id: subId,
-                    start_date: new Date().toISOString(),
-                    end_date: new Date().toISOString(),
-                    status: 'pending',
-                    billing_cycle: 'monthly',
-                    details: { expectedPrice: price }
-                  };
-                  handleOpenPayment(mockSubData);
-                }}
-              />
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800">สวัสดีคุณ, {userProfile.display_name}</h2>
+            {userProfile.role === 'admin' && (
+              <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded-md">Admin</span>
             )}
           </div>
 
-          {/* === ส่วนแสดงรายการการ์ด === */}
-          {displaySubs.length === 0 ? (
-            <div className="bg-transparent border border-dashed border-gray-300 p-8 rounded-[2rem] flex flex-col items-center justify-center text-center">
-              <p className="text-gray-400 text-sm font-medium">
-                {activeTab === 'current'
-                  ? 'ยังไม่มีแพ็กเกจที่ใช้งานในขณะนี้'
-                  : 'ยังไม่มีประวัติการใช้งานหรือยกเลิกแพ็กเกจ'
-                }
-              </p>
+          <PushNotificationPrompt userId={userProfile.id} />
+
+          <div className="flex bg-gray-200/60 p-1 rounded-xl mb-6 shadow-inner">
+            <button
+              onClick={() => setActiveTab('current')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'current' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'}`}
+            >
+              แพ็กเกจปัจจุบัน {currentSubs.length > 0 && `(${currentSubs.length})`}
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'history' ? 'bg-white text-gray-800 shadow-sm transform scale-100' : 'text-gray-500 hover:text-gray-700 scale-95'}`}
+            >
+              ประวัติ & ยกเลิก {historySubs.length > 0 && `(${historySubs.length})`}
+            </button>
+          </div>
+
+          <section className="space-y-5">
+            <div className="flex items-center justify-between ml-2 mb-4">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                {activeTab === 'current' ? 'Current Plan' : 'History Plan'}
+              </h3>
+
+              {activeTab === 'current' && (
+                <StoreDrawer
+                  subscriptions={subscriptions}
+                  onRefresh={() => fetchSubscriptions(userProfile.id)}
+                  onCheckoutSuccess={(price, subId) => {
+                    const mockSubData: DashboardSubscription = {
+                      id: subId,
+                      start_date: new Date().toISOString(),
+                      end_date: new Date().toISOString(),
+                      status: 'pending',
+                      billing_cycle: 'monthly',
+                      details: { expectedPrice: price }
+                    };
+                    handleOpenPayment(mockSubData);
+                  }}
+                />
+              )}
             </div>
-          ) : (
-            displaySubs.map((sub) => (
-              <SubscriptionCard
-                key={sub.id}
-                sub={sub}
-                onOpenDetail={handleOpenDetail}
-                onOpenPayment={handleOpenPayment}
-              />
-            ))
+
+            {displaySubs.length === 0 ? (
+              <div className="bg-transparent border border-dashed border-gray-300 p-8 rounded-[2rem] flex flex-col items-center justify-center text-center">
+                <p className="text-gray-400 text-sm font-medium">
+                  {activeTab === 'current' ? 'ยังไม่มีแพ็กเกจที่ใช้งานในขณะนี้' : 'ยังไม่มีประวัติการใช้งานหรือยกเลิกแพ็กเกจ'}
+                </p>
+              </div>
+            ) : (
+              displaySubs.map((sub) => (
+                <SubscriptionCard
+                  key={sub.id}
+                  sub={sub}
+                  onOpenDetail={handleOpenDetail}
+                  onOpenPayment={handleOpenPayment}
+                />
+              ))
+            )}
+          </section>
+
+          {activeDetailSub && (
+            <DetailDrawer
+              isOpen={isDetailOpen}
+              onClose={handleCloseDetail}
+              sub={activeDetailSub}
+              userProfile={userProfile}
+            />
           )}
-        </section>
-      </div>
 
-      {activeDetailSub && (
-        <DetailDrawer
-          isOpen={isDetailOpen}
-          onClose={handleCloseDetail}
-          sub={activeDetailSub}
-          userProfile={userProfile}
-        />
+          <PaymentModal
+            isMounted={isModalMounted}
+            isVisible={isModalVisible}
+            onClose={handleClosePayment}
+            payAmount={payAmount}
+            qrPayload={qrPayload}
+            selectedSubId={selectedSubId}
+            userProfile={userProfile}
+            onSuccess={() => fetchSubscriptions(userProfile.id)}
+          />
+        </div>
       )}
-
-      <PaymentModal
-        isMounted={isModalMounted}
-        isVisible={isModalVisible}
-        onClose={handleClosePayment}
-        payAmount={payAmount}
-        qrPayload={qrPayload}
-        selectedSubId={selectedSubId}
-        userProfile={userProfile}
-        onSuccess={() => fetchSubscriptions(userProfile.id)}
-      />
-
     </main>
   );
 }
