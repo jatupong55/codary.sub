@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
+import Swal from 'sweetalert2';
 
 // สร้าง Interface สำหรับรับค่าข้อมูลเมนู
 interface MenuItem {
@@ -48,7 +49,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [pathname]);
 
   const handleLogout = async () => {
+    Swal.fire({
+      title: 'กำลังออกจากระบบ...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
     await supabase.auth.signOut();
+    Swal.close();
     router.push('/');
   };
 

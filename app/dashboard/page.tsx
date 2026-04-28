@@ -122,7 +122,15 @@ export default function Dashboard() {
   }, [router, fetchSubscriptions]);
 
   const handleLogout = async () => {
+    Swal.fire({
+      title: 'กำลังออกจากระบบ...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
     await supabase.auth.signOut();
+    Swal.close();
     router.push('/');
   };
 
