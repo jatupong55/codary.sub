@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import generatePayload from 'promptpay-qr';
@@ -19,10 +20,12 @@ import PaymentModal from '@/components/dashboard/PaymentModal';
 import StoreDrawer from '@/components/dashboard/StoreDrawer';
 import PushNotificationPrompt from '@/components/dashboard/PushNotificationPrompt';
 
-export default function Dashboard() {
+// 1. สร้าง Component หลักแยกออกมา
+function DashboardContent() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [subscriptions, setSubscriptions] = useState<DashboardSubscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false); // เพิ่มตัวเช็ค Mounting
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
@@ -38,6 +41,7 @@ export default function Dashboard() {
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [activeDetailSub, setActiveDetailSub] = useState<DashboardSubscription | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false); // [NEW] เพิ่มตัวแปรเช็คสถานะการ Logout
 
   const MY_PROMPTPAY_ID = process.env.NEXT_PUBLIC_PROMPTPAY_ID || "";
 
@@ -79,6 +83,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     let mounted = true;
+    setIsMounted(true); // แจ้งว่า Mount เสร็จแล้วบน Client
 
     const loadData = async (session: any) => {
       let currentSession = session;
@@ -89,7 +94,8 @@ export default function Dashboard() {
       }
 
       if (!currentSession) {
-        if (mounted) router.replace('/');
+        // [MOD] ถ้ากำลัง Logout ไม่ต้องดีดกลับอัตโนมัติ (เดี๋ยวฟังก์ชัน handleLogout จัดการเอง)
+        if (mounted && !isLoggingOut) router.replace('/');
         return;
       }
 
@@ -121,14 +127,6 @@ export default function Dashboard() {
       }
     };
 
-    if (!isLoading && userProfile && isSplashActive) {
-      setIsFadingOut(true);
-      const timer = setTimeout(() => {
-        setIsSplashActive(false);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       loadData(session);
     });
@@ -137,19 +135,40 @@ export default function Dashboard() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [router, fetchSubscriptions, isLoading, userProfile, isSplashActive]);
+  }, [router, fetchSubscriptions]);
+
+  useEffect(() => {
+    if (!isLoading && userProfile && isSplashActive) {
+      setIsFadingOut(true);
+      const timer = setTimeout(() => {
+        setIsSplashActive(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, userProfile, isSplashActive]);
 
   const handleLogout = async () => {
+    setIsLoggingOut(true); // แจ้งระบบว่ากำลังจะ Logout
+
     Swal.fire({
       title: 'กำลังออกจากระบบ...',
+      html: 'ขอบคุณที่ใช้บริการ Codary Sub ครับ!<br>แล้วพบกันใหม่นะ 😊',
       allowOutsideClick: false,
+      showConfirmButton: false,
       didOpen: () => {
         Swal.showLoading();
+      },
+      customClass: {
+        popup: 'rounded-[2rem] p-10 border border-gray-100 shadow-2xl',
       }
     });
+
+    // หน่วงเวลา 2 วินาที (เพิ่มให้นิดนึงเพื่อให้รู้สึกถึงความนุ่มนวล)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     await supabase.auth.signOut();
     Swal.close();
-    router.push('/');
+    router.replace('/');
   };
 
   const handleOpenPayment = (sub: DashboardSubscription) => {
@@ -167,7 +186,7 @@ export default function Dashboard() {
         confirmButtonColor: '#ef4444',
         customClass: { popup: 'rounded-2xl' }
       });
-      
+
       sendLineAdmin(`⚠️ ระบบมีปัญหา: ลูกค้า ${userProfile?.display_name || 'ไม่ระบุชื่อ'} พยายามชำระเงิน แต่คุณยังไม่ได้ตั้งค่า NEXT_PUBLIC_PROMPTPAY_ID ในไฟล์ .env.local ครับ`);
       return;
     }
@@ -188,12 +207,17 @@ export default function Dashboard() {
   const historySubs = subscriptions.filter(sub => sub.status === 'cancelled' || isSubExpired(sub));
   const displaySubs = activeTab === 'current' ? currentSubs : historySubs;
 
+  // ถ้ายังไม่ Mount ให้คืนค่าว่างหรือ Splash แบบนิ่งๆ เพื่อให้ Server กับ Client ตรงกัน
+  if (!isMounted) {
+    return <main className="min-h-screen bg-gray-50 p-4 pb-20 relative" />;
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 p-4 pb-20 relative">
-      <SplashOverlay 
-        isVisible={isSplashActive} 
-        isFadingOut={isFadingOut} 
-        message="กำลังเตรียม Dashboard ของคุณ..." 
+      <SplashOverlay
+        isVisible={isSplashActive}
+        isFadingOut={isFadingOut}
+        message="กำลังเตรียม Dashboard ของคุณ..."
       />
 
       {userProfile && (
@@ -291,3 +315,8 @@ export default function Dashboard() {
     </main>
   );
 }
+
+// 2. Export แบบปิด SSR เพื่อแก้ปัญหา Hydration Mismatch จาก Cache อย่างถาวร
+export default dynamic(() => Promise.resolve(DashboardContent), {
+  ssr: false
+});

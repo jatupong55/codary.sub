@@ -13,9 +13,9 @@ import { format } from "date-fns";
 import { th } from "date-fns/locale";
 
 import { isSubExpired, formatDate, calculateDaysLeft } from '@/utils/subscriptionUtils';
-import type { 
-  AdminSubscription, 
-  AdminMasterAccount, 
+import type {
+  AdminSubscription,
+  AdminMasterAccount,
   GroupedAdminUser as GroupedUser
 } from '@/types/admin';
 
@@ -144,7 +144,7 @@ export default function AdminCustomersPage() {
         // [NEW] แจ้งเตือนลูกค้าผ่าน LINE เมื่อสลิปถูกอนุมัติจากหน้านี้
         const user = Array.isArray(selectedSub.users) ? selectedSub.users[0] : (selectedSub.users as any);
         const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
-        
+
         if (user?.line_user_id) {
           const formattedDate = new Date(editEndDate).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
           const productName = product?.name || 'แพ็กเกจของคุณ';
@@ -178,11 +178,14 @@ export default function AdminCustomersPage() {
       input: 'text',
       inputPlaceholder: 'เช่น ยอดเงินไม่ตรง, สลิปซ้ำ, รูปไม่ชัด...',
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#9ca3af',
       confirmButtonText: 'ปฏิเสธสลิป',
       cancelButtonText: 'ยกเลิก',
-      customClass: { popup: 'rounded-2xl' },
+      customClass: {
+        popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+        confirmButton: 'py-3 px-6 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-all active:scale-95 text-sm mx-2',
+        cancelButton: 'py-3 px-6 bg-gray-50 border-2 border-gray-300 text-gray-700 font-bold rounded-2xl hover:bg-gray-100 transition-all active:scale-95 text-sm mx-2'
+      },
+      buttonsStyling: false,
       inputValidator: (value) => {
         if (!value) return 'กรุณาระบุเหตุผลด้วยครับ!';
       }
@@ -205,7 +208,7 @@ export default function AdminCustomersPage() {
         const user = Array.isArray(selectedSub?.users) ? selectedSub?.users[0] : (selectedSub?.users as any);
         const product = Array.isArray(selectedSub?.products) ? selectedSub?.products[0] : (selectedSub?.products as any);
         const pendingPayment = selectedSub?.payments?.find(p => p.id === paymentId);
-        
+
         if (user?.line_user_id && pendingPayment) {
           const productName = product?.name || 'แพ็กเกจของคุณ';
           const lineMessage = `❌ การชำระเงินไม่ผ่านการตรวจสอบ\n\nระบบไม่สามารถตรวจสอบยอดโอนของท่านได้ หรือพบความผิดปกติในสลิปที่แนบมาค่ะ\n\n📦 บริการ: ${productName}\n💳 ยอดเงินที่แจ้ง: ${pendingPayment.amount} บาท\n📝 เหตุผลจากแอดมิน: ${rejectReason}\n\nรบกวนตรวจสอบสลิปอีกครั้ง และทำรายการแจ้งโอนใหม่ผ่านหน้าเว็บไซต์ หรือติดต่อแอดมินเพื่อขอความช่วยเหลือนะคะ\n🙏 ขออภัยในความไม่สะดวกค่ะ`;
@@ -263,9 +266,13 @@ export default function AdminCustomersPage() {
     `,
       showCancelButton: true,
       confirmButtonText: 'ยืนยัน',
-      confirmButtonColor: '#111827',
       cancelButtonText: 'ยกเลิก',
-      customClass: { popup: 'rounded-2xl' },
+      customClass: {
+        popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+        confirmButton: 'py-3 px-8 bg-[#CCF0D4] text-[#166534] font-bold rounded-2xl hover:bg-[#B5EAC0] transition-all active:scale-95 text-sm mx-2 shadow-sm border border-green-200/50',
+        cancelButton: 'py-3 px-8 bg-gray-50 border-2 border-gray-300 text-gray-700 font-bold rounded-2xl hover:bg-gray-100 transition-all active:scale-95 text-sm mx-2'
+      },
+      buttonsStyling: false,
       preConfirm: () => {
         const mode = (document.querySelector('input[name="cancelMode"]:checked') as HTMLInputElement).value;
         const reason = (document.getElementById('cancelReason') as HTMLTextAreaElement).value;
@@ -319,13 +326,13 @@ export default function AdminCustomersPage() {
     const user = sub.users as { id: string; display_name: string; email: string } | { id: string; display_name: string; email: string }[] | null;
     const actualUser = Array.isArray(user) ? user[0] : user;
     const email = actualUser?.email || 'unknown';
-    
+
     if (!acc.has(email)) {
-      acc.set(email, { 
-        userId: actualUser?.id || email, 
-        displayName: actualUser?.display_name || 'ไม่ระบุชื่อ', 
-        email: email, 
-        subs: [] 
+      acc.set(email, {
+        userId: actualUser?.id || email,
+        displayName: actualUser?.display_name || 'ไม่ระบุชื่อ',
+        email: email,
+        subs: []
       });
     }
     const existingGroup = acc.get(email);
@@ -350,8 +357,8 @@ export default function AdminCustomersPage() {
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-200 text-sm text-gray-500">
                 <th className="px-6 py-4 font-medium">ลูกค้า</th>
-                <th className="px-6 py-4 font-medium">จำนวนแพ็กเกจ</th>
-                <th className="px-6 py-4 font-medium">สถานะรวม</th>
+                <th className="px-6 py-4 font-medium whitespace-nowrap">จำนวนแพ็กเกจ</th>
+                <th className="px-6 py-4 font-medium whitespace-nowrap">สถานะรวม</th>
                 <th className="px-6 py-4 font-medium text-right">จัดการ</th>
               </tr>
             </thead>
@@ -365,28 +372,33 @@ export default function AdminCustomersPage() {
                 return (
                   <React.Fragment key={user.userId}>
                     <tr className={`border-b border-gray-100/50 transition-colors ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-white/40'}`}>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-gray-800">{user.displayName}</div>
-                        <div className="text-xs text-gray-500">{user.email}</div>
+                      <td className="px-6 py-3 whitespace-nowrap">
+                        <div className="font-semibold text-gray-800 leading-tight">{user.displayName}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5 font-normal">{user.email}</div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-3 whitespace-nowrap">
                         <span className="inline-flex items-center bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-gray-200">
                           {totalCount} รายการ
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-3 whitespace-nowrap">
                         {pendingCount > 0 ? (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-yellow-100 text-yellow-800">รออนุมัติ ({pendingCount})</span>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-yellow-600 bg-yellow-50 px-2 py-1 rounded shadow-[inset_0_0_0_1px_rgba(202,138,4,0.1)]">รออนุมัติ ({pendingCount})</span>
                         ) : activeCount > 0 ? (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-[#CCF0D4] text-green-800">กำลังใช้งาน ({activeCount})</span>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-green-700 bg-[#CCF0D4] px-2 py-1 rounded shadow-[inset_0_0_0_1px_rgba(22,101,52,0.1)]">กำลังใช้งาน ({activeCount})</span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap bg-red-100 text-red-800">หมดอายุทั้งหมด</span>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-red-600 bg-red-50 px-2 py-1 rounded shadow-[inset_0_0_0_1px_rgba(220,38,38,0.1)]">หมดอายุทั้งหมด</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <button onClick={() => setExpandedUserId(isExpanded ? null : user.userId)} className={`px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors shadow-sm inline-flex items-center gap-1.5 ${isExpanded ? 'bg-gray-100 border-gray-300 text-gray-700' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-                          {isExpanded ? 'ปิด' : 'ดูแพ็กเกจ'}
-                          <svg className={`w-4 h-4 transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      <td className="px-6 py-3 text-right">
+                        <button
+                          onClick={() => setExpandedUserId(isExpanded ? null : user.userId)}
+                          className={`p-2 rounded-xl border transition-all shadow-sm active:scale-95 ${isExpanded ? 'bg-gray-100 border-gray-300 text-gray-700' : 'bg-white border-gray-200 text-blue-600 hover:bg-blue-50'}`}
+                          title={isExpanded ? 'ปิด' : 'ดูแพ็กเกจ'}
+                        >
+                          <svg className={`w-5 h-5 transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
                         </button>
                       </td>
                     </tr>
@@ -445,16 +457,16 @@ export default function AdminCustomersPage() {
                                             </td>
                                             <td className="py-3 text-sm">
                                               {sub.billing_cycle === 'yearly' ? (
-                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
+                                                <span className="text-[9px] font-black uppercase tracking-wider text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded shadow-[inset_0_0_0_1px_rgba(147,51,234,0.1)]">รายปี</span>
                                               ) : (
-                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
+                                                <span className="text-[9px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded shadow-[inset_0_0_0_1px_rgba(37,99,235,0.1)]">รายเดือน</span>
                                               )}
                                             </td>
                                             <td className="py-3 text-sm">
                                               {sub.master_accounts ? (
-                                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 text-[11px] shadow-sm">
-                                                   {Array.isArray(sub.master_accounts) ? sub.master_accounts[0]?.email : (sub.master_accounts as any)?.email}
-                                                 </span>
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 text-[11px] shadow-sm">
+                                                  {Array.isArray(sub.master_accounts) ? sub.master_accounts[0]?.email : (sub.master_accounts as any)?.email}
+                                                </span>
                                               ) : (
                                                 <span className="text-gray-400 text-xs italic">ยังไม่จัดบ้าน</span>
                                               )}
@@ -465,24 +477,37 @@ export default function AdminCustomersPage() {
                                               </span>
                                             </td>
                                             <td className="py-3 text-sm flex gap-1 items-center">
-                                              <span className={`px-2 py-1 rounded-md text-[11px] font-medium whitespace-nowrap ${sub.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                                  sub.status === 'cancelled' ? 'bg-gray-200 text-gray-600' :
-                                                    sub.status === 'active' && !isExpired ? 'bg-[#CCF0D4] text-green-800' : 'bg-red-100 text-red-800'
+                                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] ${sub.status === 'pending' ? 'bg-yellow-50 text-yellow-600 shadow-[inset_0_0_0_1px_rgba(202,138,4,0.1)]' :
+                                                sub.status === 'cancelled' ? 'bg-gray-100 text-gray-500' :
+                                                  sub.status === 'active' && !isExpired ? 'bg-[#CCF0D4] text-green-700 shadow-[inset_0_0_0_1px_rgba(22,101,52,0.1)]' : 'bg-red-50 text-red-600 shadow-[inset_0_0_0_1px_rgba(220,38,38,0.1)]'
                                                 }`}>
-                                                {sub.status === 'pending' ? 'รออนุมัติ' : sub.status === 'cancelled' ? 'ยกเลิกแล้ว' : isExpired ? 'หมดอายุ' : sub.status}
+                                                {sub.status === 'pending' ? 'รออนุมัติ' : sub.status === 'cancelled' ? 'ยกเลิกแล้ว' : isExpired ? 'หมดอายุ' : 'ปกติ'}
                                               </span>
                                               {isWaitingCancel && sub.status === 'active' && !isExpired && (
-                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-600 whitespace-nowrap">รอเตะออก</span>
+                                                <span className="text-[10px] font-black uppercase tracking-wider bg-orange-50 text-orange-600 px-1.5 py-1 rounded shadow-[inset_0_0_0_1px_rgba(234,88,12,0.1)]">รอเตะออก</span>
                                               )}
                                             </td>
                                             <td className="py-3 text-right">
                                               {sub.status !== 'cancelled' && (
                                                 <div className="flex justify-end gap-2">
-                                                  <button onClick={() => openEditModal(sub)} className={`px-2.5 py-1 border rounded-md text-xs font-medium transition-colors shadow-sm ${needsAttention ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-                                                    {needsAttention ? 'ตรวจสอบ' : 'จัดการ'}
+                                                  <button
+                                                    onClick={() => openEditModal(sub)}
+                                                    className={`p-1.5 border rounded-lg transition-all shadow-sm active:scale-95 group ${needsAttention ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700' : 'bg-white border-gray-200 text-blue-600 hover:bg-blue-50'}`}
+                                                    title={needsAttention ? 'ตรวจสอบสลิป/อนุมัติ' : 'จัดการข้อมูล'}
+                                                  >
+                                                    <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
                                                   </button>
-                                                  <button onClick={() => handleCancelSubscription(sub)} className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 hover:shadow-sm transition-all">
-                                                    ยกเลิก/เตะออก
+                                                  <button
+                                                    onClick={() => handleCancelSubscription(sub)}
+                                                    className="p-1.5 bg-white border border-red-100 text-red-500 rounded-lg hover:bg-red-50 transition-all active:scale-95 group"
+                                                    title="ยกเลิก/เตะออก"
+                                                  >
+                                                    <svg className="w-4 h-4 group-hover:rotate-12 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
                                                   </button>
                                                 </div>
                                               )}
@@ -531,139 +556,146 @@ export default function AdminCustomersPage() {
       </div>
 
       {isModalOpen && selectedSub && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
-          <div className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all duration-300 ease-in-out ${isAnimating ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}>
-            <div className="relative px-6 py-5 flex justify-between items-center bg-gradient-to-r from-[#BCE2E8]/40 via-white to-[#BCE2E8]/20 border-b border-[#BCE2E8]/30 overflow-hidden">
-              <div className="absolute top-0 right-0 w-40 h-40 bg-white/60 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#BCE2E8]/50 rounded-full blur-2xl -ml-10 -mb-10 pointer-events-none"></div>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'}`}>
+          <div className="bg-white border border-gray-100 rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[95vh] md:max-h-[90vh] flex flex-col transform transition-all duration-300 overflow-hidden">
 
-              <h3 className="text-lg font-bold text-gray-800 tracking-wide relative z-10 flex items-center gap-2">
-                <svg className="w-5 h-5 text-[#8ABAC2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                {selectedSub.status === 'pending' ? 'อนุมัติแพ็กเกจ' : 'จัดการข้อมูลลูกค้า'}
-              </h3>
-              <button type="button" onClick={handleCloseModal} className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/60 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm transition-all">✕</button>
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/30 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 shadow-sm">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                </div>
+                <h3 className="font-bold text-gray-800">{selectedSub.status === 'pending' ? 'อนุมัติแพ็กเกจ' : 'จัดการข้อมูลลูกค้า'}</h3>
+              </div>
+              <button onClick={handleCloseModal} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex flex-col md:flex-row min-h-full">
 
-              {/* ส่วนแสดงรายละเอียดแพ็กเกจ (รายเดือน/รายปี และราคา) */}
-              {(() => {
-                const user = Array.isArray(selectedSub.users) ? selectedSub.users[0] : (selectedSub.users as any);
-                const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
-                return (
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-2">
-                    <p className="text-xs text-gray-500 uppercase font-bold mb-2 tracking-wider">ข้อมูลลูกค้า & แพ็กเกจที่เลือก</p>
-                    <div className="mb-2">
-                      <p className="font-bold text-gray-800 text-sm">{user?.display_name || 'ไม่ระบุชื่อ'}</p>
-                      <p className="text-xs text-gray-500">{user?.email || ''}</p>
+                {/* Left Side: Slip (If any) or Customer Summary */}
+                <div className="w-full md:w-1/2 bg-gray-100/40 p-4 md:p-6 flex flex-col gap-4 border-b md:border-b-0 md:border-r border-gray-100">
+                  {(() => {
+                    const pendingPayment = selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending');
+                    if (pendingPayment && pendingPayment.slip_url) {
+                      return (
+                        <div className="flex flex-col gap-4">
+                          <div className="relative group w-full flex justify-center">
+                            <img
+                              src={pendingPayment.slip_url}
+                              alt="Payment Slip"
+                              className="max-h-[40vh] md:max-h-[450px] w-auto object-contain rounded-xl shadow-md border-2 border-white"
+                            />
+                            <a href={pendingPayment.slip_url} target="_blank" className="absolute bottom-2 right-2 p-2 bg-black/40 backdrop-blur-md text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            </a>
+                          </div>
+                          <div className="p-4 bg-green-50 rounded-2xl border border-green-100 flex items-center justify-between shadow-sm">
+                            <div>
+                              <p className="text-[9px] font-black uppercase tracking-wider text-green-600/70 mb-0.5">ยอดเงินที่แจ้ง</p>
+                              <p className="text-xl font-black text-green-600 tracking-tighter">฿{pendingPayment.amount}</p>
+                            </div>
+                            <button onClick={() => handleRejectSlip(pendingPayment.id)} className="px-3 py-1.5 bg-white border border-red-100 text-red-500 rounded-lg text-[11px] font-bold hover:bg-red-50 transition-all active:scale-95">ปฏิเสธสลิป</button>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      const user = Array.isArray(selectedSub.users) ? selectedSub.users[0] : (selectedSub.users as any);
+                      const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
+                      return (
+                        <div className="space-y-4">
+                          <div className="p-5 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">สรุปแพ็กเกจ</p>
+                            <div className="flex items-start gap-3 mb-4 pb-4 border-b border-dashed border-gray-100">
+                              <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
+                                <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-gray-800 truncate">{user?.display_name || 'N/A'}</h4>
+                                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <h4 className="font-bold text-blue-600">{product?.name || 'N/A'}</h4>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{selectedSub.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}</p>
+                              </div>
+                              {selectedSub.details?.expectedPrice && (
+                                <p className="text-lg font-black text-gray-800 tracking-tighter">฿{Number(selectedSub.details.expectedPrice).toLocaleString()}</p>
+                              )}
+                            </div>
+                          </div>
+                          {selectedSub.status === 'pending' && (
+                            <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex items-center gap-3">
+                              <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center shrink-0"><svg className="w-4 h-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div>
+                              <p className="text-xs text-orange-700 font-medium leading-snug">ลูกค้ารายนี้ยังไม่ได้แนบสลิปชำระเงิน กรุณาตรวจสอบก่อนอนุมัติ</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+
+                {/* Right Side: Inputs */}
+                <div className="w-full md:w-1/2 p-6 flex flex-col gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">จัดคนลงบ้าน (Master Account)</label>
+                      <select
+                        value={editHouseId}
+                        onChange={(e) => setEditHouseId(e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="">-- ไม่ระบุ (เว้นว่าง) --</option>
+                        {(() => {
+                          const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
+                          return masterAccounts.filter(house => house.product_id === product?.id).map(house => (
+                            <option key={house.id} value={house.id}>{house.email}</option>
+                          ));
+                        })()}
+                      </select>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-200 border-dashed">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-blue-600">{product?.name || 'N/A'}</p>
-                        {/* เช็กและแสดง Badge รายปี/รายเดือน */}
-                        {selectedSub.billing_cycle === 'yearly' ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">รายปี</span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">รายเดือน</span>
-                        )}
-                      </div>
-                      {selectedSub.details?.expectedPrice && (
-                        <p className="text-sm font-black text-green-600">
-                          ฿{Number(selectedSub.details.expectedPrice).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                      )}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 flex justify-between">
+                        <span>วันหมดอายุ</span>
+                        {selectedSub.status === 'pending' && <span className="text-green-600 font-bold tracking-normal">+30/365 วันให้แล้ว</span>}
+                      </label>
+                      <DatePicker
+                        selected={editEndDate ? new Date(editEndDate) : null}
+                        onChange={(date: Date | null) => setEditEndDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                        dateFormat="dd/MM/yyyy"
+                        locale={th}
+                        placeholderText="วัน/เดือน/ปี"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                        wrapperClassName="w-full"
+                      />
                     </div>
                   </div>
-                );
-              })()}
 
-              {/* ส่วนแสดงสลิปโอนเงิน และปุ่มปฏิเสธ */}
-              {(() => {
-                const pendingPayment = selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending');
-                if (pendingPayment && pendingPayment.slip_url) {
-                  return (
-                    <div className="border border-gray-200 rounded-xl overflow-hidden mb-4">
-                      <div className="bg-gray-100 py-2 px-3 border-b border-gray-200 flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-700">สลิปชำระเงิน (รอตรวจสอบ)</span>
-                      </div>
-                      <img src={pendingPayment.slip_url} alt="Slip" className="w-full h-auto max-h-60 object-contain bg-gray-50" />
-                      <div className="p-3 bg-white border-t border-gray-100 flex items-center justify-between">
-                        <span className="text-sm font-bold text-green-600">ยอดเงิน: ฿{pendingPayment.amount}</span>
-                        <button
-                          onClick={() => handleRejectSlip(pendingPayment.id)}
-                          className="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-100 transition-colors"
-                        >
-                          ปฏิเสธสลิปนี้
-                        </button>
-                      </div>
-                    </div>
-                  );
-                } else if (selectedSub.status === 'pending') {
-                  return (
-                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl mb-4">
-                      <p className="text-xs text-orange-600 font-bold flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                        ลูกค้ารายนี้ยังไม่ได้แนบสลิปชำระเงิน
-                      </p>
-                      <p className="text-[11px] text-orange-500 mt-1">กรุณารอให้ลูกค้าอัปโหลดสลิปก่อนจึงจะสามารถอนุมัติได้</p>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">จัดคนลงบ้าน (Master Account)</label>
-                <select
-                  value={editHouseId}
-                  onChange={(e) => setEditHouseId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-gray-800 focus:border-gray-800 outline-none transition-colors"
-                >
-                  <option value="">-- ไม่ระบุ (เว้นว่าง) --</option>
-                  {(() => {
-                    const product = Array.isArray(selectedSub.products) ? selectedSub.products[0] : (selectedSub.products as any);
-                    return masterAccounts.filter(house => house.product_id === product?.id).map(house => (
-                      <option key={house.id} value={house.id}>{house.email}</option>
-                    ));
-                  })()}
-                </select>
-              </div>
-
-              <div className="relative z-[100]">
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5 flex justify-between">
-                  <span>วันหมดอายุ</span>
-                  {selectedSub.status === 'pending' && (
-                    <span className="text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded font-bold">บวกวันให้อัตโนมัติแล้ว ✨</span>
-                  )}
-                </label>
-                <DatePicker
-                  selected={editEndDate ? new Date(editEndDate) : null}
-                  onChange={(date: Date | null) => {
-                    setEditEndDate(date ? format(date, 'yyyy-MM-dd') : '');
-                  }}
-                  dateFormat="dd/MM/yyyy"
-                  locale={th}
-                  placeholderText="วัน/เดือน/ปี"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-gray-800 outline-none transition-all"
-                  wrapperClassName="w-full"
-                />
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button onClick={handleCloseModal} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors">ยกเลิก</button>
-
-                {selectedSub.status === 'pending' && !selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending') ? (
-                  <button disabled className="flex-1 py-2.5 bg-gray-200 text-gray-400 font-medium rounded-xl cursor-not-allowed">
-                    รอลูกค้าแนบสลิป
-                  </button>
-                ) : (
-                  <button onClick={handleSave} disabled={isProcessing} className="flex-1 py-2.5 bg-gray-900 text-white font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50">
-                    {isProcessing ? 'กำลังบันทึก...' : selectedSub.status === 'pending' ? 'อนุมัติและบันทึก' : 'บันทึกข้อมูล'}
-                  </button>
-                )}
+                  <div className="mt-auto pt-6 flex gap-3">
+                    <button onClick={handleCloseModal} className="flex-1 py-3 px-4 bg-gray-50 border-2 border-gray-300 text-gray-700 font-bold rounded-2xl hover:bg-gray-100 hover:border-gray-400 transition-all active:scale-95 text-sm">ยกเลิก</button>
+                    <button
+                      onClick={handleSave}
+                      disabled={isProcessing || (selectedSub.status === 'pending' && !selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending'))}
+                      className={`flex-[1.5] py-3 px-4 font-bold rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 text-sm shadow-lg ${selectedSub.status === 'pending' && !selectedSub.payments?.find(p => p.status === 'รอตรวจสอบ' || p.status === 'pending')
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed shadow-none'
+                        : 'bg-[#CCF0D4] text-[#166534] hover:bg-[#B5EAC0] shadow-green-100 border border-green-200/50'
+                        }`}
+                    >
+                      {isProcessing ? (
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                      )}
+                      {selectedSub.status === 'pending' ? 'อนุมัติ' : 'บันทึกข้อมูล'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

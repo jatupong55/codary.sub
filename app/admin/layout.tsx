@@ -51,11 +51,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const handleLogout = async () => {
     Swal.fire({
       title: 'กำลังออกจากระบบ...',
+      text: 'ขอบคุณที่ทำงานหนักในวันนี้ครับบอส! 😊',
       allowOutsideClick: false,
+      showConfirmButton: false,
       didOpen: () => {
         Swal.showLoading();
+      },
+      customClass: {
+        popup: 'rounded-[2rem] p-10 border border-gray-100 shadow-2xl',
       }
     });
+
+    // หน่วงเวลา 1.5 วินาทีเพื่อให้ UX ดูสมูทขึ้น
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     await supabase.auth.signOut();
     Swal.close();
     router.push('/');

@@ -19,6 +19,21 @@ const serwist = new Serwist({
   runtimeCaching: defaultCache,
 });
 
+// เพิ่มการล้าง Cache เก่าแบบ Manual เมื่อ Service Worker ตัวใหม่ทำงาน
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          // ลบ Cache ที่ไม่ใช่ของเวอร์ชันปัจจุบัน (ถ้าจำเป็น)
+          // ในที่นี้เราสั่งลบเพื่อให้เบราว์เซอร์เริ่มเก็บไฟล์จาก Build ใหม่ทั้งหมด
+          return caches.delete(cacheName);
+        })
+      );
+    })
+  );
+});
+
 serwist.addEventListeners();
 
 // Push Event Listener for Web Push Notifications

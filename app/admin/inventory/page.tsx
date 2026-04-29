@@ -68,7 +68,16 @@ export default function AdminInventoryPage() {
             setAccounts((accData as unknown as MasterAccount[]) || []);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-            Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: message, confirmButtonColor: '#111827' });
+            Swal.fire({ 
+                icon: 'error', 
+                title: 'โหลดข้อมูลไม่สำเร็จ', 
+                text: message, 
+                customClass: {
+                    popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+                    confirmButton: 'py-3 px-8 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-all active:scale-95 text-sm mx-2 shadow-sm border border-red-100'
+                },
+                buttonsStyling: false
+            });
         } finally {
             setIsLoading(false);
         }
@@ -165,13 +174,25 @@ export default function AdminInventoryPage() {
                 icon: 'success',
                 title: 'บันทึกสำเร็จ',
                 text: editId ? 'อัปเดตข้อมูลบ้านเรียบร้อย' : 'เพิ่มบ้านหลังใหม่เรียบร้อย',
-                confirmButtonColor: '#111827',
-                customClass: { popup: 'rounded-2xl' },
+                customClass: {
+                    popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+                    confirmButton: 'py-3 px-8 bg-[#CCF0D4] text-[#166534] font-bold rounded-2xl hover:bg-[#B5EAC0] transition-all active:scale-95 text-sm mx-2 shadow-sm border border-green-200/50'
+                },
+                buttonsStyling: false,
             });
             await fetchData();
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-            Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message, confirmButtonColor: '#ef4444' });
+            Swal.fire({ 
+                icon: 'error', 
+                title: 'บันทึกไม่สำเร็จ', 
+                text: message, 
+                customClass: {
+                    popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+                    confirmButton: 'py-3 px-8 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-all active:scale-95 text-sm mx-2 shadow-sm border border-red-100'
+                },
+                buttonsStyling: false
+            });
         } finally {
             setIsProcessing(false);
         }
@@ -183,11 +204,14 @@ export default function AdminInventoryPage() {
             html: `คุณต้องการลบบ้าน <b>${email}</b> ใช่หรือไม่?<br/><span class="text-xs text-red-500">หมายเหตุ: จะลบได้ก็ต่อเมื่อไม่มีลูกค้าอยู่ในบ้านนี้แล้ว</span>`,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#ef4444',
-            cancelButtonColor: '#9ca3af',
             confirmButtonText: 'ใช่, ลบเลย!',
             cancelButtonText: 'ยกเลิก',
-            customClass: { popup: 'rounded-2xl' },
+            customClass: {
+                popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+                confirmButton: 'py-3 px-8 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-all active:scale-95 text-sm mx-2 shadow-sm border border-red-100',
+                cancelButton: 'py-3 px-8 bg-gray-50 border-2 border-gray-300 text-gray-700 font-bold rounded-2xl hover:bg-gray-100 transition-all active:scale-95 text-sm mx-2'
+            },
+            buttonsStyling: false,
         });
 
         if (!confirmResult.isConfirmed) return;
@@ -196,14 +220,32 @@ export default function AdminInventoryPage() {
             const { error } = await supabase.from('master_accounts').delete().eq('id', id);
             if (error) throw error;
 
-            Swal.fire({ icon: 'success', title: 'ลบสำเร็จ!', text: 'ลบข้อมูลบ้านออกจากระบบแล้ว', confirmButtonColor: '#111827', customClass: { popup: 'rounded-2xl' } });
+            Swal.fire({ 
+                icon: 'success', 
+                title: 'ลบสำเร็จ!', 
+                text: 'ลบข้อมูลบ้านออกจากระบบแล้ว', 
+                customClass: {
+                    popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+                    confirmButton: 'py-3 px-8 bg-[#CCF0D4] text-[#166534] font-bold rounded-2xl hover:bg-[#B5EAC0] transition-all active:scale-95 text-sm mx-2 shadow-sm border border-green-200/50'
+                },
+                buttonsStyling: false
+            });
             await fetchData();
         } catch (error: unknown) {
             const isFK = (error as { code?: string })?.code === '23503';
             const message = isFK
                 ? 'ไม่สามารถลบได้เนื่องจากยังมีลูกค้าเชื่อมโยงกับบ้านนี้อยู่ (ให้ย้ายลูกค้าออกก่อน)'
                 : error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-            Swal.fire({ icon: 'error', title: 'ลบไม่ได้', text: message, confirmButtonColor: '#ef4444' });
+            Swal.fire({ 
+                icon: 'error', 
+                title: 'ลบไม่ได้', 
+                text: message, 
+                customClass: {
+                    popup: 'rounded-[2rem] border border-gray-100 shadow-2xl',
+                    confirmButton: 'py-3 px-8 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-all active:scale-95 text-sm mx-2 shadow-sm border border-red-100'
+                },
+                buttonsStyling: false
+            });
         }
     };
 

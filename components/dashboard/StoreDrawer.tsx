@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Swal from 'sweetalert2';
-import { sendLineAdmin } from '@/lib/lineNotify';
 import type { DashboardSubscription } from '@/types/dashboard';
 
 // Type สำหรับ Product ที่ดึงจาก safe_master_accounts (มี availableSlots เพิ่มมา)
@@ -132,7 +131,7 @@ export default function StoreDrawer({
 
   const getDisplayPrice = (product: StoreProduct) => {
     if (billingCycle === 'yearly') {
-      return product.yearly_price || (product.price * 12); 
+      return product.yearly_price || (product.price * 12);
     }
     return product.price;
   };
@@ -155,7 +154,7 @@ export default function StoreDrawer({
 
       const startDate = new Date();
       const endDate = new Date(startDate);
-      
+
       if (billingCycle === 'yearly') {
         endDate.setFullYear(endDate.getFullYear() + 1);
       } else {
@@ -177,7 +176,7 @@ export default function StoreDrawer({
         .from('subscriptions')
         .insert(newSubscriptions)
         .select();
-        
+
       if (error) throw error;
 
       // ปิดหน้าต่าง Store และโชว์ข้อความแปปนึง
@@ -196,10 +195,10 @@ export default function StoreDrawer({
         const selectedProduct = cart[0];
         const finalPrice = getDisplayPrice(cart[0]); // เพราะมีแค่ชิ้นเดียวแน่นอน
         const subId = insertedData[0].id;
-        
+
         // ลบการแจ้งเตือนออเดอร์ใหม่ตรงนี้ เพื่อลดความซ้ำซ้อน (ไปแจ้งทีเดียวตอนอัปโหลดสลิป)
         setTimeout(() => {
-            onCheckoutSuccess(finalPrice, subId);
+          onCheckoutSuccess(finalPrice, subId);
         }, 800); // ดีเลย์นิดนึงให้ UI ไม่กระตุก
       }
 
@@ -225,17 +224,26 @@ export default function StoreDrawer({
     <>
       <button
         onClick={() => setIsDrawerOpen(true)}
-        className="flex items-center gap-2 bg-[#D3F4DC] text-[#424242] px-4 py-2.5 rounded-xl font-black hover:bg-[#C2EACD] transition-all duration-300 shadow-sm hover:shadow-md active:scale-95 relative"
+        className="relative group inline-flex h-10 overflow-hidden rounded-xl p-[2px] transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_4px_15px_rgba(109,40,217,0.15)] hover:shadow-[0_8px_25px_rgba(109,40,217,0.25)]"
       >
-        <svg className="w-5 h-5 text-[#424242]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
-        </svg>
-        เพิ่มแพ็กเกจ
-        {cart.length > 0 && (
-          <span className="absolute -top-2 -right-2 bg-[#424242] text-[#D3F4DC] w-6 h-6 flex items-center justify-center rounded-full text-xs font-black shadow-sm animate-bounce">
-            {cart.length}
-          </span>
-        )}
+        {/* ขอบไฟวิ่งสีพาสเทล */}
+        <span className="absolute inset-[-1000%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#F3CFE0_0%,#E9D5FF_25%,#BCE2E8_50%,#F3CFE0_75%,#E9D5FF_100%)]" />
+        
+        <span className="inline-flex h-full w-full items-center justify-center rounded-[10px] bg-white/95 backdrop-blur-sm px-4 py-2 text-[13px] font-bold text-[#6D28D9] gap-1.5 relative z-10 transition-colors group-hover:bg-white/80 overflow-hidden">
+          {/* Ripple Effect Layer */}
+          <span className="absolute inset-0 bg-purple-400/0 group-active:bg-purple-400/20 transition-colors duration-300 rounded-lg"></span>
+          
+          <svg className="w-4 h-4 text-[#6D28D9] relative z-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+          <span className="relative z-20">ช้อปเลย</span>
+          
+          {cart.length > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-[#6D28D9] text-white w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black shadow-sm animate-bounce border border-white z-30">
+              {cart.length}
+            </span>
+          )}
+        </span>
       </button>
 
       {isDrawerOpen && (
@@ -260,21 +268,19 @@ export default function StoreDrawer({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F8F9FA]">
-          
+
           <div className="flex bg-gray-100 p-1.5 rounded-xl shadow-inner mb-2">
             <button
               onClick={() => setBillingCycle('monthly')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                billingCycle === 'monthly' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${billingCycle === 'monthly' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
             >
               รายเดือน
             </button>
             <button
               onClick={() => setBillingCycle('yearly')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${
-                billingCycle === 'yearly' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${billingCycle === 'yearly' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
             >
               รายปี
             </button>
@@ -299,7 +305,7 @@ export default function StoreDrawer({
             availableProducts.map(product => {
               const inCart = cart.some(item => item.id === product.id);
               const brandStyle = getBrandStyle(product.category);
-              
+
               const iconSource = product.icon || brandStyle.logo;
               const isUrl = iconSource?.startsWith('http') || iconSource?.startsWith('data:image');
 
@@ -308,19 +314,18 @@ export default function StoreDrawer({
               const fallbackClass = useDatabaseColor ? '' : brandStyle.bg;
 
               const isLowStock = product.availableSlots <= 2;
-              
+
               const currentPrice = getDisplayPrice(product);
               const discountPercent = calculateDiscountPercent(product.price, product.yearly_price);
 
               return (
                 <div
                   key={product.id}
-                  className={`bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between transition-all duration-200 ${
-                    inCart ? 'border-blue-300 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-100 hover:border-gray-300'
-                  }`}
+                  className={`bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between transition-all duration-200 ${inCart ? 'border-blue-300 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-100 hover:border-gray-300'
+                    }`}
                 >
                   <div className="flex items-center gap-4">
-                    <div 
+                    <div
                       className={`w-12 h-12 rounded-[1rem] flex items-center justify-center shadow-sm overflow-hidden shrink-0 ${fallbackClass}`}
                       style={containerStyle}
                     >
@@ -339,12 +344,11 @@ export default function StoreDrawer({
                         <span className="text-[10px] font-black text-gray-500 bg-gray-100 px-2 py-1 rounded-md uppercase tracking-widest">
                           {product.category || 'PREMIUM'}
                         </span>
-                        
-                        <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm border ${
-                          isLowStock 
-                            ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white border-red-600 animate-pulse' 
+
+                        <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm border ${isLowStock
+                            ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white border-red-600 animate-pulse'
                             : 'bg-gradient-to-r from-[#D3F4DC] to-[#C2EACD] text-[#347144] border-[#B2D8BC]'
-                        }`}>
+                          }`}>
                           {isLowStock ? (
                             <>
                               <svg className="w-3 h-3 text-yellow-300" viewBox="0 0 24 24" fill="currentColor">
@@ -363,7 +367,7 @@ export default function StoreDrawer({
                         </span>
                       </div>
                       <h3 className="font-bold text-gray-800 text-base leading-tight line-clamp-1">{product.name}</h3>
-                      
+
                       <div className="flex items-center gap-2 mt-0.5">
                         <p className="text-gray-500 font-semibold text-sm">
                           ฿{currentPrice.toLocaleString()} <span className="text-xs font-normal">/ {billingCycle === 'yearly' ? 'ปี' : 'เดือน'}</span>
@@ -379,11 +383,10 @@ export default function StoreDrawer({
                   </div>
                   <button
                     onClick={() => inCart ? removeFromCart(product.id) : addToCart(product)}
-                    className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all shadow-sm active:scale-90 ${
-                      inCart
+                    className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all shadow-sm active:scale-90 ${inCart
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-50 text-gray-400 hover:bg-gray-800 hover:text-white border border-gray-200'
-                    }`}
+                      }`}
                   >
                     {inCart ? (
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
@@ -410,11 +413,10 @@ export default function StoreDrawer({
           <button
             onClick={handleCheckout}
             disabled={cart.length === 0 || isSubmitting}
-            className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-2 transition-all duration-300 ${
-              cart.length === 0
+            className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-2 transition-all duration-300 ${cart.length === 0
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
-            }`}
+              }`}
           >
             {isSubmitting ? (
               <>
