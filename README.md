@@ -70,4 +70,4 @@
    ```
    *หมายเหตุ: หากต้องการทดสอบระบบ Web Push Notification และ PWA ในเครื่องตัวเอง ให้รัน `npm run build` ตามด้วย `npm run start` เพื่อจำลองสภาพแวดล้อม Production*
 
-
+Craft By Major9 Codary.dev
