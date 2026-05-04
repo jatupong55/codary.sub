@@ -41,7 +41,8 @@ function DashboardContent() {
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [activeDetailSub, setActiveDetailSub] = useState<DashboardSubscription | null>(null);
-  const [isLoggingOut, setIsLoggingOut] = useState(false); // [NEW] เพิ่มตัวแปรเช็คสถานะการ Logout
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [hasSelectedRole, setHasSelectedRole] = useState(false); // [NEW] เช็คว่าแอดมินเลือกบทบาทหรือยัง
 
   const MY_PROMPTPAY_ID = process.env.NEXT_PUBLIC_PROMPTPAY_ID || "";
 
@@ -88,27 +89,35 @@ function DashboardContent() {
     const loadData = async (session: any) => {
       let currentSession = session;
 
+      // ถ้าไม่มี session ส่งมา ให้ลองหาเอง
       if (!currentSession) {
         const { data } = await supabase.auth.getSession();
         currentSession = data.session;
       }
 
+      // ถ้ายังไม่มีอีก ให้รอจังหวะสุดท้าย 1 วินาที (เฉพาะตอนที่เพิ่งโหลดหน้าเว็บ)
       if (!currentSession) {
-        // [MOD] ถ้ากำลัง Logout ไม่ต้องดีดกลับอัตโนมัติ (เดี๋ยวฟังก์ชัน handleLogout จัดการเอง)
-        if (mounted && !isLoggingOut) router.replace('/');
+        console.log('Session not found yet, waiting for Supabase to stabilize...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const { data: retryData } = await supabase.auth.getSession();
+        currentSession = retryData.session;
+      }
+
+      if (!currentSession) {
+        if (mounted && !isLoggingOut) {
+          console.log('No session confirmed after wait, redirecting to login');
+          router.replace('/');
+        }
         return;
       }
+
+      console.log('Session confirmed for:', currentSession.user.email);
 
       const { data: dbUser } = await supabase
         .from('users')
         .select('*, line_user_id')
         .eq('id', currentSession.user.id)
         .single();
-
-      if (dbUser?.role === 'admin') {
-        if (mounted) router.replace('/admin');
-        return;
-      }
 
       const fallbackAvatar = process.env.NEXT_PUBLIC_FALLBACK_AVATAR || '';
 
@@ -159,8 +168,9 @@ function DashboardContent() {
         Swal.showLoading();
       },
       customClass: {
-        popup: 'rounded-[2rem] p-10 border border-gray-100 shadow-2xl',
-      }
+        popup: 'rounded-[2rem] p-6 md:p-10 border border-gray-100 shadow-2xl',
+      },
+      width: '90%', // กำหนดความกว้างเป็น % เพื่อให้รองรับทุกหน้าจอ
     });
 
     // หน่วงเวลา 2 วินาที (เพิ่มให้นิดนึงเพื่อให้รู้สึกถึงความนุ่มนวล)
@@ -213,7 +223,7 @@ function DashboardContent() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 pb-20 relative">
+    <main className="min-h-screen bg-gray-50 p-4 pb-20 relative overflow-x-hidden max-w-[100vw]">
       <SplashOverlay
         isVisible={isSplashActive}
         isFadingOut={isFadingOut}

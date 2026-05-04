@@ -58,6 +58,21 @@ export default function StoreDrawer({
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
+  // Lock body scroll when drawer is open
+  useEffect(() => {
+    if (isDrawerOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = 'unset';
+      document.body.style.touchAction = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+      document.body.style.touchAction = 'unset';
+    };
+  }, [isDrawerOpen]);
+
   useEffect(() => {
     if (isDrawerOpen) {
       fetchAvailableProducts();
@@ -86,7 +101,13 @@ export default function StoreDrawer({
 
       const existingCategories = subscriptions
         .filter(sub => sub.status === 'active' || sub.status === 'pending')
-        .map(sub => sub.products?.[0]?.category?.toLowerCase()?.trim());
+        .map(sub => {
+          // ใน Supabase Query ผลลัพธ์ของ products จะเป็น Object หรือ Array ขึ้นอยู่กับความสัมพันธ์
+          // ถ้าเป็น Object ให้เข้าถึงตรงๆ ถ้าเป็น Array ให้เอาตัวแรก
+          const productData = Array.isArray(sub.products) ? sub.products[0] : sub.products;
+          return productData?.category?.toLowerCase()?.trim();
+        })
+        .filter(Boolean); // กรองค่า null/undefined ออก
 
       const availableProductsMap = new Map();
 
@@ -222,41 +243,45 @@ export default function StoreDrawer({
 
   return (
     <>
+    <div className="relative inline-flex group">
       <button
         onClick={() => setIsDrawerOpen(true)}
-        className="relative group inline-flex h-10 overflow-hidden rounded-xl p-[2px] transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_4px_15px_rgba(109,40,217,0.15)] hover:shadow-[0_8px_25px_rgba(109,40,217,0.25)]"
+        className="relative inline-flex h-10 overflow-hidden rounded-xl p-[2px] transition-all duration-300 hover:scale-105 active:scale-95 shadow-[0_4px_15px_rgba(109,40,217,0.15)] hover:shadow-[0_8px_25px_rgba(109,40,217,0.25)]"
       >
         {/* ขอบไฟวิ่งสีพาสเทล */}
         <span className="absolute inset-[-1000%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#F3CFE0_0%,#E9D5FF_25%,#BCE2E8_50%,#F3CFE0_75%,#E9D5FF_100%)]" />
-        
+
         <span className="inline-flex h-full w-full items-center justify-center rounded-[10px] bg-white/95 backdrop-blur-sm px-4 py-2 text-[13px] font-bold text-[#6D28D9] gap-1.5 relative z-10 transition-colors group-hover:bg-white/80 overflow-hidden">
           {/* Ripple Effect Layer */}
           <span className="absolute inset-0 bg-purple-400/0 group-active:bg-purple-400/20 transition-colors duration-300 rounded-lg"></span>
-          
+
           <svg className="w-4 h-4 text-[#6D28D9] relative z-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
           </svg>
           <span className="relative z-20">ช้อปเลย</span>
-          
-          {cart.length > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-[#6D28D9] text-white w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black shadow-sm animate-bounce border border-white z-30">
-              {cart.length}
-            </span>
-          )}
         </span>
       </button>
 
+      {/* ย้าย Badge มาไว้มุมซ้ายบนแทน เพื่อความแปลกใหม่และไม่ติดขอบจอ */}
+      {cart.length > 0 && (
+        <span className="absolute -top-1.5 -left-1.5 bg-[#6D28D9] text-white w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-black shadow-sm animate-bounce border border-white z-30">
+          {cart.length}
+        </span>
+      )}
+    </div>
+
       {isDrawerOpen && (
         <div
-          className="fixed inset-0 bg-[#424242]/40 backdrop-blur-sm z-40 transition-opacity"
+          className="fixed inset-0 bg-[#424242]/40 backdrop-blur-sm z-[90] transition-opacity"
           onClick={() => setIsDrawerOpen(false)}
         ></div>
       )}
 
-      <div className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+      {/* Drawer Container */}
+      <div className={`fixed top-0 bottom-0 left-0 right-0 sm:left-auto sm:right-0 sm:w-[448px] max-w-full bg-white z-[100] transform transition-transform duration-300 ease-in-out flex flex-col overflow-hidden h-[100dvh] ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
 
-        <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-[#F0F7F8]">
-          <h2 className="text-xl font-black text-[#424242]">เลือกแพ็กเกจพรีเมียม</h2>
+        <div className="px-4 md:px-6 py-4 md:py-5 border-b border-gray-100 flex justify-between items-center bg-[#F0F7F8]">
+          <h2 className="text-lg md:text-xl font-black text-[#424242]">เลือกแพ็กเกจพรีเมียม</h2>
           <button
             onClick={() => setIsDrawerOpen(false)}
             className="text-gray-400 hover:text-[#424242] p-2 bg-white rounded-full shadow-sm hover:bg-gray-50 transition-colors"
@@ -267,7 +292,7 @@ export default function StoreDrawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#F8F9FA]">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-[#F8F9FA]">
 
           <div className="flex bg-gray-100 p-1.5 rounded-xl shadow-inner mb-2">
             <button
@@ -400,22 +425,24 @@ export default function StoreDrawer({
           )}
         </div>
 
-        <div className="border-t border-gray-100 p-6 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.02)] relative z-10">
-          <div className="flex justify-between items-end mb-5">
-            <div>
-              <span className="font-bold text-gray-400 text-sm uppercase tracking-wider">ยอดรวมสุทธิ</span>
-              <p className="text-xs text-gray-500 font-medium">1 รายการ ({billingCycle === 'yearly' ? 'รายปี' : 'รายเดือน'})</p>
+        <div className="border-t border-gray-100 px-4 py-6 bg-white relative z-10 pb-safe w-full box-border overflow-hidden">
+          <div className="flex justify-between items-end mb-4">
+            <div className="shrink-0">
+              <span className="font-bold text-gray-400 text-[10px] uppercase tracking-wider">ยอดรวมสุทธิ</span>
+              <p className="text-[9px] text-gray-500 font-medium">1 รายการ ({billingCycle === 'yearly' ? 'รายปี' : 'รายเดือน'})</p>
             </div>
-            <span className="text-3xl font-black text-gray-800">
-              ฿{cart.length > 0 ? getDisplayPrice(cart[0]).toLocaleString() : 0}
-            </span>
+            <div className="text-right truncate ml-2">
+              <span className="text-xl md:text-3xl font-black text-gray-800 block leading-none">
+                ฿{cart.length > 0 ? getDisplayPrice(cart[0]).toLocaleString() : 0}
+              </span>
+            </div>
           </div>
           <button
             onClick={handleCheckout}
             disabled={cart.length === 0 || isSubmitting}
-            className={`w-full py-4 rounded-xl font-bold text-lg flex justify-center items-center gap-2 transition-all duration-300 ${cart.length === 0
+            className={`w-full py-3.5 md:py-4 rounded-xl font-bold text-sm md:text-lg flex justify-center items-center gap-2 transition-all duration-300 ${cart.length === 0
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg hover:-translate-y-0.5'
+                : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
               }`}
           >
             {isSubmitting ? (
