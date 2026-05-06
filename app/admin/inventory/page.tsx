@@ -59,8 +59,8 @@ export default function AdminInventoryPage() {
                 .from('master_accounts')
                 .select(`
                   id, email, password, max_slots, status, details, next_renewal_date, cost, billing_cycle, 
-                  products!master_accounts_product_id_fkey ( id, name, category ),
-                  subscriptions!subscriptions_master_account_id_fkey ( id, status )
+                  products ( id, name, category ),
+                  subscriptions ( id, status )
                 `)
                 .order('created_at', { ascending: false });
 

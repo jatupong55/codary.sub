@@ -87,9 +87,9 @@ export default function AdminCustomersPage() {
         .from('subscriptions')
         .select(`
           id, end_date, status, master_account_id, details, billing_cycle,
-          users!subscriptions_user_id_fkey ( id, display_name, email, line_user_id ),
-          products!subscriptions_product_id_fkey ( id, name, category ),
-          master_accounts!subscriptions_master_account_id_fkey ( id, email ),
+          users ( id, display_name, email, line_user_id ),
+          products ( id, name, category ),
+          master_accounts ( id, email ),
           payments ( id, status, slip_url, amount )
         `)
         .order('created_at', { ascending: false });
